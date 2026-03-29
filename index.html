@@ -877,13 +877,14 @@ h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ── API KEYS ──
-const FAL_KEY = '44b2f216-8945-4023-8584-e8f1df87fd5a:5ca9ecab44dad30d5446d6d7697fdb98';
+const FAL_KEY  = '44b2f216-8945-4023-8584-e8f1df87fd5a:5ca9ecab44dad30d5446d6d7697fdb98';
 const GEMINI_KEY = 'AIzaSyCQ_KsBoAsCFMSJ9hQCktr-TrDdVsMtXUo';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+// gemini-1.5-flash: stable, fast, vision-capable, free tier
+const GEMINI_API = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
 
 // ── STATE ──
 let currentLang = 'tr';
-let selectedQuality = 'dev'; // schnell | dev | pro
+let selectedQuality = 'dev';
 let userPlan = 'free';
 let roomsUsed = 0;
 let roomLimit = 1;
@@ -892,6 +893,73 @@ let pendingPlan = null;
 let chatHistory = [];
 let chatOpen = false;
 let loggedInUser = null;
+
+// ── GEMINI CORE ──
+async function gemini(userText, imageBase64, imageMime) {
+  const parts = [];
+  if (imageBase64 && imageMime) {
+    parts.push({ inline_data: { mime_type: imageMime, data: imageBase64 } });
+  }
+  parts.push({ text: userText });
+
+  const res = await fetch(GEMINI_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
+    })
+  });
+  if (!res.ok) {
+    console.error('Gemini HTTP', res.status, await res.text());
+    return null;
+  }
+  const d = await res.json();
+  if (d.error) { console.error('Gemini error:', d.error); return null; }
+  return d?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+}
+
+// ── FAL.AI ──
+async function falGenerate(prompt) {
+  // Use schnell (4 steps = fastest, still good quality)
+  const res = await fetch('https://fal.run/fal-ai/flux/schnell', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Key ${FAL_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      prompt,
+      num_inference_steps: 4,
+      num_images: 1,
+      image_size: 'landscape_4_3'
+    })
+  });
+  if (!res.ok) { console.error('fal error', res.status, await res.text()); return null; }
+  const d = await res.json();
+  return d?.images?.[0]?.url || null;
+}
+
+// ── HELPERS ──
+function getUploadedFile() {
+  return document.getElementById('file-input')?.files?.[0] || null;
+}
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result.split(',')[1]);
+    r.onerror = () => rej();
+    r.readAsDataURL(file);
+  });
+}
+function fileToDataUrl(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = () => rej();
+    r.readAsDataURL(file);
+  });
+}
 
 // ── PASSWORD EYE ──
 function togglePass(inputId, eyeEl) {
@@ -905,12 +973,11 @@ function switchAuthTab(tab) {
   authTabState = tab;
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
   document.getElementById('tab-register').classList.toggle('active', tab==='register');
-  document.getElementById('pass2-wrap').style.display = tab==='register' ? 'block' : 'none';
+  document.getElementById('pass2-wrap').style.display = tab==='register'?'block':'none';
   document.getElementById('auth-btn').textContent = tab==='login'
     ? (currentLang==='tr'?'Giriş Yap':'Sign In')
     : (currentLang==='tr'?'Hesap Oluştur':'Create Account');
 }
-
 function loginWithAccount(name, email, initials) {
   loggedInUser = {name, email, initials};
   closeModal('modal-account-google');
@@ -919,7 +986,6 @@ function loginWithAccount(name, email, initials) {
   showToast('✅ ' + name + (currentLang==='tr'?' olarak giriş yapıldı':', signed in'));
   setTimeout(()=>showScreen('screen-pricing'), 700);
 }
-
 function doAuth() {
   const e = document.getElementById('auth-email-input').value;
   if (!e) { showToast(currentLang==='tr'?'⚠️ E-posta girin':'⚠️ Enter email'); return; }
@@ -941,369 +1007,135 @@ function selectPlan(plan) {
   showToast('🆓 ' + names[plan] + (currentLang==='tr'?' seçildi!':', selected!'));
   setTimeout(()=>{ updateUsageBar(); showScreen('screen-upload'); }, 700);
 }
-
 function openPayment(plan) {
   pendingPlan = plan;
   const isPro = plan==='pro';
-  document.getElementById('pay-plan-name').textContent = isPro ? '🔥 Pro' : '💎 Max';
+  document.getElementById('pay-plan-name').textContent = isPro?'🔥 Pro':'💎 Max';
   document.getElementById('pay-plan-price').innerHTML = isPro
-    ? '<strong>$4.99</strong>/ay · 5 ' + (currentLang==='tr'?'oda analizi':'room analyses')
-    : '<strong>$7.99</strong>/ay · 10 ' + (currentLang==='tr'?'oda analizi':'room analyses');
-  document.getElementById('pay-card').value = '';
-  document.getElementById('pay-exp').value = '';
-  document.getElementById('pay-cvv').value = '';
-  document.getElementById('pay-name').value = '';
+    ? '<strong>$4.99</strong>/ay · 5 '+(currentLang==='tr'?'oda analizi':'room analyses')
+    : '<strong>$7.99</strong>/ay · 10 '+(currentLang==='tr'?'oda analizi':'room analyses');
   openModal('modal-payment');
 }
-
-function formatCard(el) {
-  let v = el.value.replace(/\D/g,'').substring(0,16);
-  el.value = v.replace(/(.{4})/g,'$1 ').trim();
-}
-function formatExp(el) {
-  let v = el.value.replace(/\D/g,'').substring(0,4);
-  if (v.length>=2) v = v.substring(0,2)+'/'+v.substring(2);
-  el.value = v;
-}
-
-function completePayment() {
-  const card = document.getElementById('pay-card').value.replace(/\s/g,'');
-  const exp = document.getElementById('pay-exp').value;
-  const cvv = document.getElementById('pay-cvv').value;
-  const name = document.getElementById('pay-name').value;
-  if (card.length < 16 || exp.length < 5 || cvv.length < 3 || !name) {
-    showToast(currentLang==='tr'?'⚠️ Tüm kart bilgilerini doldurun':'⚠️ Fill all card fields');
-    return;
-  }
-  const btn = document.getElementById('pay-btn');
-  btn.textContent = currentLang==='tr'?'⏳ İşleniyor...':'⏳ Processing...';
-  btn.disabled = true;
-  setTimeout(()=>{
-    closeModal('modal-payment');
-    btn.textContent = currentLang==='tr'?'💳 Ödemeyi Tamamla':'💳 Complete Payment';
-    btn.disabled = false;
-    selectPlan(pendingPlan);
-    showToast((pendingPlan==='pro'?'🔥 Pro':'💎 Max') + (currentLang==='tr'?' satın alındı! Hoş geldin.':' purchased! Welcome.'));
-  }, 1800);
+function formatCard(el){let v=el.value.replace(/\D/g,'').substring(0,16);el.value=v.replace(/(.{4})/g,'$1 ').trim();}
+function formatExp(el){let v=el.value.replace(/\D/g,'').substring(0,4);if(v.length>=2)v=v.substring(0,2)+'/'+v.substring(2);el.value=v;}
+function completePayment(){
+  const card=document.getElementById('pay-card').value.replace(/\s/g,'');
+  const exp=document.getElementById('pay-exp').value;
+  const cvv=document.getElementById('pay-cvv').value;
+  const name=document.getElementById('pay-name').value;
+  if(card.length<16||exp.length<5||cvv.length<3||!name){showToast(currentLang==='tr'?'⚠️ Tüm kart bilgilerini doldurun':'⚠️ Fill all card fields');return;}
+  const btn=document.getElementById('pay-btn');
+  btn.textContent=currentLang==='tr'?'⏳ İşleniyor...':'⏳ Processing...';
+  btn.disabled=true;
+  setTimeout(()=>{closeModal('modal-payment');btn.textContent=currentLang==='tr'?'💳 Ödemeyi Tamamla':'💳 Complete Payment';btn.disabled=false;selectPlan(pendingPlan);},1800);
 }
 
 // ── UPLOAD ──
-function updateUsageBar() {
-  const pct = (roomsUsed/roomLimit)*100;
-  document.getElementById('usage-fill').style.width = pct+'%';
-  document.getElementById('usage-label').textContent = currentLang==='tr'
-    ? `Kullanım: ${roomsUsed}/${roomLimit} oda`
-    : `Usage: ${roomsUsed}/${roomLimit} room${roomLimit>1?'s':''}`;
+function updateUsageBar(){
+  const pct=(roomsUsed/roomLimit)*100;
+  document.getElementById('usage-fill').style.width=pct+'%';
+  document.getElementById('usage-label').textContent=currentLang==='tr'
+    ?`Kullanım: ${roomsUsed}/${roomLimit} oda`
+    :`Usage: ${roomsUsed}/${roomLimit} room${roomLimit>1?'s':''}`;
 }
-function handleFileSelect(e) {
+function handleFileSelect(e){
   const file=e.target.files[0]; if(!file) return;
   const r=new FileReader();
   r.onload=ev=>{const th=document.getElementById('preview-thumb');th.src=ev.target.result;th.style.display='block';};
   r.readAsDataURL(file);
 }
-function selectRoom(btn) {
+function selectRoom(btn){
   document.querySelectorAll('.room-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
 }
-function setQuality(q, btn) {
-  selectedQuality = q;
-  document.querySelectorAll('#q-schnell,#q-dev,#q-pro').forEach(b => b.classList.remove('active'));
+function setQuality(q,btn){
+  selectedQuality=q;
+  document.querySelectorAll('#q-schnell,#q-dev,#q-pro').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
 }
 
-function getUploadedFile() {
-  return document.getElementById('file-input')?.files?.[0] || null;
-}
-
-function fileToDataUrl(file) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = e => res(e.target.result);
-    r.onerror = () => rej(new Error('read fail'));
-    r.readAsDataURL(file);
-  });
-}
-
-function applyVisualFallback(imgs, dataUrl) {
-  // Show original photo with CSS filters as earthquake / safe versions
-  if (dataUrl && imgs[1]) {
-    imgs[1].src = dataUrl;
-    imgs[1].style.cssText = 'filter:saturate(.4) brightness(.55) contrast(1.4) sepia(.25);transform:rotate(-1.5deg) scale(1.03);transition:all .4s;';
-  }
-  if (dataUrl && imgs[2]) {
-    imgs[2].src = dataUrl;
-    imgs[2].style.cssText = 'filter:saturate(1.15) brightness(1.08) hue-rotate(6deg);transition:all .4s;';
-  }
-}
-
-async function uploadFileToFal(file) {
-  // fal.ai file upload endpoint
-  const res = await fetch('https://rest.alpha.fal.ai/storage/upload/initiate', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Key ${FAL_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ content_type: file.type, file_name: file.name })
-  });
-  if (!res.ok) return null;
-  const { upload_url, file_url } = await res.json();
-
-  // Upload the actual file
-  await fetch(upload_url, {
-    method: 'PUT',
-    headers: { 'Content-Type': file.type },
-    body: file
-  });
-  return file_url;
-}
-
-async function falGenerate(model, inputParams) {
-  const res = await fetch(`https://fal.run/${model}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Key ${FAL_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(inputParams)
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data?.images?.[0]?.url || null;
-}
-
-async function generateImages(roomLabel) {
-  const file = getUploadedFile();
-  const imgs = document.querySelectorAll('.comp-img-wrap img');
-
-  // Step 1: Show original photo immediately in slot 1
-  let dataUrl = null;
-  if (file) {
-    dataUrl = await fileToDataUrl(file);
-    if (imgs[0]) { imgs[0].src = dataUrl; imgs[0].style.cssText = ''; }
-  }
-
-  // Step 2: Try to upload to fal storage for image-to-image
-  let falImageUrl = null;
-  if (file && FAL_KEY) {
-    try { falImageUrl = await uploadFileToFal(file); } catch(e) { console.warn('fal upload failed:', e); }
-  }
-
-  const steps = selectedQuality === 'schnell' ? 4 : 28;
-
-  const riskPrompt = `${roomLabel} interior during a violent earthquake: furniture toppling, items flying off shelves, dust and debris, red emergency lighting, cracked walls, chaos, photorealistic disaster`;
-  const safePrompt = `${roomLabel} interior perfectly prepared for earthquake safety: furniture anchored to walls, TV secured, clear pathways, soft warm lighting, organized and safe, photorealistic`;
-
-  try {
-    let riskUrl = null, safeUrl = null;
-
-    if (falImageUrl) {
-      // Image-to-image: use uploaded photo
-      [riskUrl, safeUrl] = await Promise.all([
-        falGenerate('fal-ai/flux/dev/image-to-image', {
-          prompt: riskPrompt, image_url: falImageUrl,
-          strength: 0.85, num_inference_steps: steps, num_images: 1, image_size: 'landscape_4_3'
-        }),
-        falGenerate('fal-ai/flux/dev/image-to-image', {
-          prompt: safePrompt, image_url: falImageUrl,
-          strength: 0.80, num_inference_steps: steps, num_images: 1, image_size: 'landscape_4_3'
-        })
-      ]);
-    } else {
-      // Text-to-image fallback
-      [riskUrl, safeUrl] = await Promise.all([
-        falGenerate('fal-ai/flux/schnell', { prompt: riskPrompt, num_inference_steps: 4, num_images: 1, image_size: 'landscape_4_3' }),
-        falGenerate('fal-ai/flux/schnell', { prompt: safePrompt, num_inference_steps: 4, num_images: 1, image_size: 'landscape_4_3' })
-      ]);
-    }
-
-    if (riskUrl && imgs[1]) { imgs[1].src = riskUrl; imgs[1].style.cssText = ''; }
-    else applyVisualFallback(imgs.length ? [null, imgs[1]] : [], dataUrl);
-
-    if (safeUrl && imgs[2]) { imgs[2].src = safeUrl; imgs[2].style.cssText = ''; }
-    else if (imgs[2]) { imgs[2].src = dataUrl || imgs[2].src; imgs[2].style.cssText = 'filter:saturate(1.2) brightness(1.1) hue-rotate(10deg);'; }
-
-    if (riskUrl || safeUrl) {
-      const demoBanner = document.getElementById('demo-txt');
-      if (demoBanner) demoBanner.innerHTML = currentLang === 'tr'
-        ? '<strong>AI Görseli</strong> — ' + (falImageUrl ? 'Odana özel üretildi.' : 'fal.ai ile üretildi.')
-        : '<strong>AI Generated</strong> — ' + (falImageUrl ? 'Generated from your room.' : 'Generated by fal.ai.');
-      showToast(currentLang === 'tr' ? '🎨 AI görselleri hazır!' : '🎨 AI images ready!');
-    }
-  } catch(err) {
-    console.error('fal.ai error:', err);
-    applyVisualFallback(imgs, dataUrl);
-  }
-}
-
-async function analyzeRoomWithGemini(roomId, imageBase64, imageMime) {
+// ── ANALYSIS: GEMINI VISION → real AI text ──
+async function analyzeRoomWithGemini(roomId, b64, mime) {
   const isTR = currentLang === 'tr';
-  const roomNames = {tr:{salon:"salon",yatak:"yatak odasi",mutfak:"mutfak",cocuk:"cocuk odasi"},en:{salon:"living room",yatak:"bedroom",mutfak:"kitchen",cocuk:"children's room"}};
-  const roomLabel = roomNames[isTR ? 'tr' : 'en'][roomId] || (isTR ? 'oda' : 'room');
+  const roomLabelTR = {salon:'salon',yatak:'yatak odası',mutfak:'mutfak',cocuk:'çocuk odası'};
+  const roomLabelEN = {salon:'living room',yatak:'bedroom',mutfak:'kitchen',cocuk:"children's room"};
+  const rl = isTR ? (roomLabelTR[roomId]||'oda') : (roomLabelEN[roomId]||'room');
+
   const prompt = isTR
-    ? `Bu bir ${roomLabel} fotografi. Deprem guvenligi uzmani olarak analiz et. SADECE asagidaki JSON formatinda yanitla, baska hicbir sey yazma:\n{\n  "risks": [\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"high"},\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"high"},\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"high"},\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"medium"},\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"medium"}\n  ],\n  "checklist": [\n    {"text":"is1","priority":"high"},{"text":"is2","priority":"high"},{"text":"is3","priority":"high"},{"text":"is4","priority":"medium"},{"text":"is5","priority":"medium"}\n  ],\n  "shelter": {\n    "best":"En iyi yer","bestDesc":"Aciklama","second":"2. secenek","secondDesc":"Aciklama",\n    "avoid":["kacin1","kacin2","kacin3","kacin4"]\n  }\n}`
-    : `This is a ${roomLabel} photo. As earthquake safety expert, analyze it. Respond ONLY with JSON:\n{\n  "risks": [\n    {"icon":"emoji","title":"title","desc":"desc","severity":"high"},\n    {"icon":"emoji","title":"title","desc":"desc","severity":"high"},\n    {"icon":"emoji","title":"title","desc":"desc","severity":"high"},\n    {"icon":"emoji","title":"title","desc":"desc","severity":"medium"},\n    {"icon":"emoji","title":"title","desc":"desc","severity":"medium"}\n  ],\n  "checklist": [\n    {"text":"item1","priority":"high"},{"text":"item2","priority":"high"},{"text":"item3","priority":"high"},{"text":"item4","priority":"medium"},{"text":"item5","priority":"medium"}\n  ],\n  "shelter": {\n    "best":"Best spot","bestDesc":"Desc","second":"2nd","secondDesc":"Desc",\n    "avoid":["avoid1","avoid2","avoid3","avoid4"]\n  }\n}`;
+    ? `Bu bir ${rl} fotoğrafı. Deprem güvenliği uzmanı olarak bu odayı analiz et.
+SADECE geçerli JSON döndür, başka hiç bir şey yazma:
+{"risks":[{"icon":"emoji","title":"kısa başlık","desc":"kısa açıklama","severity":"high"},{"icon":"emoji","title":"kısa başlık","desc":"kısa açıklama","severity":"high"},{"icon":"emoji","title":"kısa başlık","desc":"kısa açıklama","severity":"high"},{"icon":"emoji","title":"kısa başlık","desc":"kısa açıklama","severity":"medium"},{"icon":"emoji","title":"kısa başlık","desc":"kısa açıklama","severity":"medium"}],"checklist":[{"text":"yapılacak iş","priority":"high"},{"text":"yapılacak iş","priority":"high"},{"text":"yapılacak iş","priority":"high"},{"text":"yapılacak iş","priority":"medium"},{"text":"yapılacak iş","priority":"medium"}],"shelter":{"best":"en iyi yer","bestDesc":"açıklama","second":"2. seçenek","secondDesc":"açıklama","avoid":["kaçın 1","kaçın 2","kaçın 3","kaçın 4"]},"roomDesc":"bu odayı 15 kelimeyle İngilizce tanımla: stil, renkler, mobilyalar"}`
+    : `This is a ${rl} photo. Analyze it as earthquake safety expert.
+Return ONLY valid JSON, nothing else:
+{"risks":[{"icon":"emoji","title":"short title","desc":"short desc","severity":"high"},{"icon":"emoji","title":"short title","desc":"short desc","severity":"high"},{"icon":"emoji","title":"short title","desc":"short desc","severity":"high"},{"icon":"emoji","title":"short title","desc":"short desc","severity":"medium"},{"icon":"emoji","title":"short title","desc":"short desc","severity":"medium"}],"checklist":[{"text":"action","priority":"high"},{"text":"action","priority":"high"},{"text":"action","priority":"high"},{"text":"action","priority":"medium"},{"text":"action","priority":"medium"}],"shelter":{"best":"best spot","bestDesc":"desc","second":"2nd option","secondDesc":"desc","avoid":["avoid 1","avoid 2","avoid 3","avoid 4"]},"roomDesc":"describe this room in 15 English words: style, colors, furniture"}`;
+
   try {
-    const raw = imageBase64 ? await callGemini(prompt, imageBase64, imageMime) : await callGemini(prompt);
+    const raw = await gemini(prompt, b64, mime);
     if (!raw) return null;
-    const cleaned = raw.replace(/```json|```/g,"").trim();
-    return JSON.parse(cleaned);
-  } catch(e) { console.error("Gemini analysis error:", e); return null; }
+    const json = raw.replace(/```json|```/g,'').replace(/^[^{]*/,'').replace(/[^}]*$/,'');
+    return JSON.parse(json);
+  } catch(e) {
+    console.error('analyzeRoom parse error:', e);
+    return null;
+  }
 }
 
-function getRoomAnalysis(roomId, lang) {
-  const isTR = lang === 'tr';
-  const data = {
-    salon: {
-      risks: isTR ? [
-        {icon:'🗄️', t:'Sabitlenmemiş Dolap', d:'Yüksekliği nedeniyle devrilme riski kritik.', s:'high'},
-        {icon:'📺', t:'TV Sabitleme Eksik', d:'Düz ekranlar depremde fırlayabilir.', s:'high'},
-        {icon:'🪑', t:'Kanepe Pencere Önü', d:'Cam kırılması riski yüksek.', s:'high'},
-        {icon:'🕯️', t:'Dekoratif Objeler', d:'Raf üstündeki ağır dekorlar düşebilir.', s:'medium'},
-        {icon:'🚪', t:'Kaçış Yolu', d:'Mobilya yerleşimi çıkışı daraltıyor olabilir.', s:'medium'},
-      ] : [
-        {icon:'🗄️', t:'Unsecured Cabinet', d:'High fall risk due to its height.', s:'high'},
-        {icon:'📺', t:'TV Not Anchored', d:'Flat screens can fly off during shaking.', s:'high'},
-        {icon:'🪑', t:'Sofa Near Window', d:'High risk from breaking glass.', s:'high'},
-        {icon:'🕯️', t:'Decorative Objects', d:'Heavy decor on shelves may fall.', s:'medium'},
-        {icon:'🚪', t:'Escape Route', d:'Furniture layout may narrow exit.', s:'medium'},
-      ],
-      checklist: isTR ? [
-        {t:'Dolabı duvara L-braketi ile sabitle', p:'high'},
-        {t:'TV\'yi anti-tip kayışı ile sabitle', p:'high'},
-        {t:'Kanepeyi pencereden uzağa taşı', p:'high'},
-        {t:'Raf dekorlarını alt raflara indir', p:'medium'},
-        {t:'Kapı önündeki eşyaları çek', p:'medium'},
-      ] : [
-        {t:'Anchor cabinet to wall with L-bracket', p:'high'},
-        {t:'Secure TV with anti-tip strap', p:'high'},
-        {t:'Move sofa away from windows', p:'high'},
-        {t:'Move shelf decor to lower shelves', p:'medium'},
-        {t:'Clear items blocking doorway', p:'medium'},
-      ],
-      shelter: isTR
-        ? {best:'Sağlam İç Duvar Yanı', bestDesc:'Pencereden uzak, iç duvar dibinde Çök-Kapan-Tutun.', second:'Kanepe Yanı', secondDesc:'Kanepenin yanına çök, ÜSTÜNE değil.', third:'İç Koridor', thirdDesc:'Sarsıntı devam ediyorsa koridora geç.', avoid:['Pencere önü — cam kırılabilir','TV karşısı — fırlayabilir','Büyük dolap yanı — devrilebilir','Dış duvarlar — daha fazla hareket eder']}
-        : {best:'Inner Wall Side', bestDesc:'Away from windows, Drop-Cover-Hold near inner wall.', second:'Beside Sofa', secondDesc:'Drop BESIDE the sofa, not under it.', third:'Inner Hallway', thirdDesc:'Move to hallway if shaking continues.', avoid:['Near windows — glass can shatter','Facing TV — it can fly off','Beside tall cabinet — can topple','Outer walls — move more']},
-    },
-    yatak: {
-      risks: isTR ? [
-        {icon:'🖼️', t:'Tablo / Ayna Yatak Üstü', d:'Ağır çerçeve uyku sırasında düşebilir.', s:'high'},
-        {icon:'🗄️', t:'Gardrop Sabitlenmemiş', d:'Gardrop devrilmesi ciddi yaralanmaya neden olur.', s:'high'},
-        {icon:'💡', t:'Abajur / Aydınlatma', d:'Başucundaki armatür düşebilir.', s:'high'},
-        {icon:'📚', t:'Yatak Başı Raf', d:'Kitap ve objeler uykuda başa düşebilir.', s:'medium'},
-        {icon:'🚪', t:'Çıkış Mesafesi', d:'Yatak kapı önünü kapatıyor olabilir.', s:'medium'},
-      ] : [
-        {icon:'🖼️', t:'Picture / Mirror Above Bed', d:'Heavy frame can fall during sleep.', s:'high'},
-        {icon:'🗄️', t:'Wardrobe Not Secured', d:'Toppling wardrobe causes serious injury.', s:'high'},
-        {icon:'💡', t:'Bedside Lamp / Fixture', d:'Bedside lighting can fall.', s:'high'},
-        {icon:'📚', t:'Headboard Shelf', d:'Books and objects can fall on head while sleeping.', s:'medium'},
-        {icon:'🚪', t:'Exit Distance', d:'Bed may be blocking door path.', s:'medium'},
-      ],
-      checklist: isTR ? [
-        {t:'Yatak üstündeki tablo/aynayı kaldır ya da sabitle', p:'high'},
-        {t:'Gardrobu duvara L-braketi ile sabitle', p:'high'},
-        {t:'Baş ucuna küçük bir deprem çantası hazırla', p:'high'},
-        {t:'Yatak başı rafını boşalt ya da sabitle', p:'medium'},
-        {t:'Geceleri uyurken yatağın yanında ayakkabı bulundur', p:'medium'},
-      ] : [
-        {t:'Remove or secure picture/mirror above bed', p:'high'},
-        {t:'Anchor wardrobe to wall with L-bracket', p:'high'},
-        {t:'Prepare a small emergency bag near the bed', p:'high'},
-        {t:'Clear or secure headboard shelf', p:'medium'},
-        {t:'Keep shoes near bed for nighttime emergencies', p:'medium'},
-      ],
-      shelter: isTR
-        ? {best:'Yatak Yanı Zemin', bestDesc:'Deprem gece olursa yataktan in, yanına çök, başını koru.', second:'İç Duvar Dibi', secondDesc:'Gardroptan uzak, iç duvara sokulun.', third:'Kapı Eşiği', thirdDesc:'Ancak yapısal açıdan güçlüyse.', avoid:['Yatak ÜSTÜNDE kalmak — tavan alçıpanı düşebilir','Gardrop önü — devrilebilir','Pencere önü — cam kırılabilir','Balkon kapısı önü']}
-        : {best:'Floor Beside Bed', bestDesc:'If quake hits at night, get off bed, drop beside it, protect head.', second:'Inner Wall', secondDesc:'Stay away from wardrobe, crouch against inner wall.', third:'Doorway', thirdDesc:'Only if structurally reinforced.', avoid:['Staying ON the bed — ceiling can fall','In front of wardrobe — can topple','Near windows — glass breaks','Near balcony door']},
-    },
-    mutfak: {
-      risks: isTR ? [
-        {icon:'🔪', t:'Dolap Kapakları Açılır', d:'Üst dolaplar açılarak içindekiler dökülür.', s:'high'},
-        {icon:'🔥', t:'Ocak Güvenliği', d:'Deprem sırasında gaz açık kalabilir, yangın riski.', s:'high'},
-        {icon:'🍶', t:'Cam Eşyalar', d:'Bardak ve tabaklar kırılarak tehlike yaratır.', s:'high'},
-        {icon:'🧯', t:'Yangın Tüpü Yok', d:'Mutfakta yangın söndürücü bulunmuyor.', s:'medium'},
-        {icon:'🚿', t:'Su Kesintisi Hazırlığı', d:'Deprem sonrası su gelmeyebilir.', s:'medium'},
-      ] : [
-        {icon:'🔪', t:'Cabinet Doors Open', d:'Upper cabinets fly open spilling contents.', s:'high'},
-        {icon:'🔥', t:'Gas Stove Risk', d:'Gas may stay open during quake, fire hazard.', s:'high'},
-        {icon:'🍶', t:'Glass Items', d:'Glasses and plates shatter creating danger.', s:'high'},
-        {icon:'🧯', t:'No Fire Extinguisher', d:'No fire extinguisher visible in kitchen.', s:'medium'},
-        {icon:'🚿', t:'Water Supply', d:'Water may be cut off after earthquake.', s:'medium'},
-      ],
-      checklist: isTR ? [
-        {t:'Üst dolaplara mandallı kilit tak', p:'high'},
-        {t:'Ana gaz vanasının yerini öğren, hemen kapat', p:'high'},
-        {t:'Cam eşyaları alt dolaplara taşı', p:'high'},
-        {t:'Mutfağa yangın söndürücü al', p:'medium'},
-        {t:'10 litrelik içme suyu stoku tut', p:'medium'},
-      ] : [
-        {t:'Install latches on upper cabinet doors', p:'high'},
-        {t:'Learn location of main gas valve, close immediately', p:'high'},
-        {t:'Move glassware to lower cabinets', p:'high'},
-        {t:'Get a fire extinguisher for the kitchen', p:'medium'},
-        {t:'Keep 10L drinking water stock', p:'medium'},
-      ],
-      shelter: isTR
-        ? {best:'Sağlam Masa Altı', bestDesc:'Varsa masanın altına gir, ayaklarını tut.', second:'İç Duvar Dibi', secondDesc:'Ocak ve dolap aralarından uzak.', third:'Koridora Çık', thirdDesc:'Mutfaktan çıkmak en güvenlisi.', avoid:['Ocak önü — gaz/yangın riski','Cam dolap önü — kırılabilir','Buzdolabı yanı — devrilebilir','Pencere önü']}
-        : {best:'Under Sturdy Table', bestDesc:'Get under the table and hold the legs.', second:'Inner Wall', secondDesc:'Away from stove and cabinets.', third:'Exit to Hallway', thirdDesc:'Leaving kitchen is safest.', avoid:['In front of stove — gas/fire risk','In front of glass cabinet — can break','Next to refrigerator — can topple','Near windows']},
-    },
-    cocuk: {
-      risks: isTR ? [
-        {icon:'🧸', t:'Oyuncak Rafı Sabitlenmemiş', d:'Ağır oyuncaklar çocuğun üstüne düşebilir.', s:'high'},
-        {icon:'🛏️', t:'Ranza / Yüksek Yatak', d:'Sarsıntıda düşme riski çok yüksek.', s:'high'},
-        {icon:'📺', t:'TV / Ekran Güvensiz', d:'Çocuklar ekrana yakın oturduğu için risk artar.', s:'high'},
-        {icon:'🪟', t:'Pencere Yanı Oyun Alanı', d:'Çocuklar depremde pencereye koşabilir.', s:'medium'},
-        {icon:'🎒', t:'Çocuk Çantası Hazır Değil', d:'Çocuğa özel deprem çantası eksik.', s:'medium'},
-      ] : [
-        {icon:'🧸', t:'Toy Shelf Not Secured', d:'Heavy toys can fall on child.', s:'high'},
-        {icon:'🛏️', t:'Bunk Bed / High Bed', d:'Very high fall risk during shaking.', s:'high'},
-        {icon:'📺', t:'TV / Screen Unsecured', d:'Children sit close to screens, higher risk.', s:'high'},
-        {icon:'🪟', t:'Play Area Near Window', d:'Children may run to window during quake.', s:'medium'},
-        {icon:'🎒', t:'Child Emergency Bag Missing', d:'No child-specific emergency kit visible.', s:'medium'},
-      ],
-      checklist: isTR ? [
-        {t:'Oyuncak rafını duvara sabitle', p:'high'},
-        {t:'Ranzanın alt yatağını kullan, üstünü boşalt', p:'high'},
-        {t:'TV\'yi anti-tip kayışı ile sabitle', p:'high'},
-        {t:'Çocuğa deprem tatbikatı yaptır', p:'medium'},
-        {t:'Çocuğa özel deprem çantası hazırla', p:'medium'},
-      ] : [
-        {t:'Anchor toy shelf to wall', p:'high'},
-        {t:'Use bottom bunk only, keep top bunk clear', p:'high'},
-        {t:'Secure TV with anti-tip strap', p:'high'},
-        {t:'Practice earthquake drill with child', p:'medium'},
-        {t:'Prepare child-specific emergency kit', p:'medium'},
-      ],
-      shelter: isTR
-        ? {best:'Sağlam Masa Altı', bestDesc:'Çocuğa Çök-Kapan-Tutun pozisyonunu öğret.', second:'İç Duvar Dibi', secondDesc:'Pencereden ve raflardan uzak.', third:'Kapı Eşiği', thirdDesc:'Yapısal güvenli kapılarda.', avoid:['Pencereye koşmak','Ranza üstünde kalmak','Oyuncak rafı önünde durmak','Balkona çıkmak']}
-        : {best:'Under Sturdy Table', bestDesc:'Teach child Drop-Cover-Hold position.', second:'Inner Wall', secondDesc:'Away from windows and shelves.', third:'Doorway', thirdDesc:'Only structurally reinforced doors.', avoid:['Running to windows','Staying on top bunk','Standing near toy shelf','Going to balcony']},
-    }
-  };
-  return data[roomId] || data['salon'];
-}
-
+// ── APPLY ANALYSIS TO DOM ──
 function applyAnalysisToDOM(roomId, aiData) {
   const isTR = currentLang === 'tr';
-  const staticAnalysis = getRoomAnalysis(roomId, currentLang);
 
-  // Use Gemini AI data if available, else use static fallback
-  const risks = aiData?.risks?.length ? aiData.risks.map(r => ({
-    icon: r.icon || '⚠️', t: r.title, d: r.desc, s: r.severity
-  })) : staticAnalysis.risks;
+  // Fallback static data per room
+  const fallback = {
+    salon:{ risks:[
+      {icon:'🗄️',t:'Sabitlenmemiş Dolap',d:'Devrilme riski yüksek.',s:'high'},
+      {icon:'📺',t:'TV Sabitleme Eksik',d:'Depremde fırlayabilir.',s:'high'},
+      {icon:'🪑',t:'Kanepe Pencere Önü',d:'Cam kırılması riski.',s:'high'},
+      {icon:'🕯️',t:'Dekoratif Objeler',d:'Raf üstünden düşebilir.',s:'medium'},
+      {icon:'🚪',t:'Kaçış Yolu',d:'Çıkış daraltılmış olabilir.',s:'medium'}],
+      checklist:[{t:'Dolabı duvara sabitle',p:'high'},{t:'TV anti-tip kayışı tak',p:'high'},{t:'Kanepeyi pencereden uzaklaştır',p:'high'},{t:'Raf dekorlarını aşağı indir',p:'medium'},{t:'Kapı önünü temizle',p:'medium'}],
+      shelter:{best:'Sağlam İç Duvar',bestDesc:'Pencereden uzak, Çök-Kapan-Tutun.',second:'Kanepe Yanı',secondDesc:'Yanına çök, ÜSTÜNE değil.',avoid:['Pencere önü','TV karşısı','Dolap yanı','Dış duvarlar']}
+    },
+    yatak:{ risks:[
+      {icon:'🖼️',t:'Yatak Üstü Tablo',d:'Uyurken düşebilir.',s:'high'},
+      {icon:'🗄️',t:'Gardrop Sabitlenmemiş',d:'Devrilme ciddi yaralanma.',s:'high'},
+      {icon:'💡',t:'Baş Ucu Aydınlatma',d:'Düşme riski var.',s:'high'},
+      {icon:'📚',t:'Yatak Başı Raf',d:'Kitaplar başa düşebilir.',s:'medium'},
+      {icon:'🚪',t:'Kapı Erişimi',d:'Yatak kapıyı kapatıyor.',s:'medium'}],
+      checklist:[{t:'Yatak üstü tabloyu kaldır',p:'high'},{t:'Gardrobu duvara sabitle',p:'high'},{t:'Başucuna deprem çantası hazırla',p:'high'},{t:'Yatak başı rafını boşalt',p:'medium'},{t:'Geceleri yanında ayakkabı bulundur',p:'medium'}],
+      shelter:{best:'Yatak Yanı Zemin',bestDesc:'Yataktan in, yanına çök, başını koru.',second:'İç Duvar Dibi',secondDesc:'Gardroptan uzak iç duvara.',avoid:['Yatak ÜSTÜNDE kalmak','Gardrop önü','Pencere önü','Balkon kapısı']}
+    },
+    mutfak:{ risks:[
+      {icon:'🔪',t:'Dolap Kapakları',d:'Açılarak içindekiler dökülür.',s:'high'},
+      {icon:'🔥',t:'Ocak Güvenliği',d:'Gaz kaçağı ve yangın riski.',s:'high'},
+      {icon:'🍶',t:'Cam Eşyalar',d:'Kırılarak tehlike yaratır.',s:'high'},
+      {icon:'🧯',t:'Yangın Tüpü Yok',d:'Mutfakta söndürücü gerekli.',s:'medium'},
+      {icon:'🚿',t:'Su Stoğu',d:'Deprem sonrası su kesilebilir.',s:'medium'}],
+      checklist:[{t:'Üst dolaplara mandal tak',p:'high'},{t:'Ana gaz vanasını öğren',p:'high'},{t:'Cam eşyaları alt dolaba taşı',p:'high'},{t:'Yangın söndürücü al',p:'medium'},{t:'10L su stoğu yap',p:'medium'}],
+      shelter:{best:'Masa Altı',bestDesc:'Varsa masanın altına gir.',second:'İç Duvar',secondDesc:'Ocak ve dolaptan uzak.',avoid:['Ocak önü','Cam dolap önü','Buzdolabı yanı','Pencere önü']}
+    },
+    cocuk:{ risks:[
+      {icon:'🧸',t:'Oyuncak Rafı',d:'Ağır oyuncaklar düşebilir.',s:'high'},
+      {icon:'🛏️',t:'Ranza Üst Kat',d:'Düşme riski çok yüksek.',s:'high'},
+      {icon:'📺',t:'Ekran Güvensiz',d:'Çocuklar yakın oturur.',s:'high'},
+      {icon:'🪟',t:'Pencere Yanı',d:'Çocuklar koşabilir.',s:'medium'},
+      {icon:'🎒',t:'Çocuk Çantası',d:'Çocuğa özel kit eksik.',s:'medium'}],
+      checklist:[{t:'Oyuncak rafını duvara sabitle',p:'high'},{t:'Ranza üst yatağı boşalt',p:'high'},{t:'TV anti-tip kayışı tak',p:'high'},{t:'Deprem tatbikatı yap',p:'medium'},{t:'Çocuk deprem çantası hazırla',p:'medium'}],
+      shelter:{best:'Masa Altı',bestDesc:'Çök-Kapan-Tutun öğret.',second:'İç Duvar',secondDesc:'Pencereden uzak.',avoid:['Pencereye koşmak','Ranza üstünde kalmak','Oyuncak rafı önü','Balkon']}
+    }
+  };
 
-  const checklist = aiData?.checklist?.length ? aiData.checklist.map(c => ({
-    t: c.text, p: c.priority
-  })) : staticAnalysis.checklist;
+  const fb = fallback[roomId] || fallback.salon;
 
+  // Build from AI data if available
+  const risks = aiData?.risks?.length ? aiData.risks.map(r=>({icon:r.icon||'⚠️',t:r.title,d:r.desc,s:r.severity})) : fb.risks;
+  const checklist = aiData?.checklist?.length ? aiData.checklist.map(c=>({t:c.text,p:c.priority})) : fb.checklist;
   const shelter = aiData?.shelter ? {
-    best: aiData.shelter.best,
-    bestDesc: aiData.shelter.bestDesc,
-    second: aiData.shelter.second,
-    secondDesc: aiData.shelter.secondDesc,
-    avoid: aiData.shelter.avoid || []
-  } : staticAnalysis.shelter;
+    best: aiData.shelter.best, bestDesc: aiData.shelter.bestDesc,
+    second: aiData.shelter.second, secondDesc: aiData.shelter.secondDesc,
+    avoid: aiData.shelter.avoid||[]
+  } : fb.shelter;
 
-  const critCount = risks.filter(r => r.s === 'high').length;
+  const critCount = risks.filter(r=>r.s==='high').length;
 
   // Badge
   const badge = document.getElementById('res-badge');
@@ -1316,43 +1148,84 @@ function applyAnalysisToDOM(roomId, aiData) {
     const nums = document.querySelectorAll('.risk-stat-number');
     if (nums[0]) nums[0].textContent = risks.length;
     if (nums[1]) nums[1].textContent = critCount;
-    if (nums[2]) nums[2].textContent = '%' + Math.min(95, 60 + critCount * 8);
+    if (nums[2]) nums[2].textContent = '%' + Math.min(95, 60+critCount*8);
   } catch(e){}
 
   // Risk cards
-  risks.forEach((r, i) => {
-    const ti = document.getElementById(`r${i+1}t`); if (ti) ti.textContent = r.t;
-    const di = document.getElementById(`r${i+1}d`); if (di) di.textContent = r.d;
-    const si = document.getElementById(`r${i+1}s`);
-    if (si) {
-      si.textContent = r.s === 'high' ? (isTR ? 'Kritik' : 'Critical') : (isTR ? 'Orta' : 'Medium');
-      si.className = `severity ${r.s === 'high' ? 'sev-high' : 'sev-med'}`;
-    }
-    const icon = document.querySelectorAll('.risk-icon-wrap')[i];
-    if (icon) icon.textContent = r.icon || '⚠️';
+  risks.forEach((r,i)=>{
+    const ti=document.getElementById(`r${i+1}t`); if(ti) ti.textContent=r.t;
+    const di=document.getElementById(`r${i+1}d`); if(di) di.textContent=r.d;
+    const si=document.getElementById(`r${i+1}s`);
+    if(si){si.textContent=r.s==='high'?(isTR?'Kritik':'Critical'):(isTR?'Orta':'Medium');si.className=`severity ${r.s==='high'?'sev-high':'sev-med'}`;}
+    const icon=document.querySelectorAll('.risk-icon-wrap')[i]; if(icon) icon.textContent=r.icon||'⚠️';
   });
 
   // Checklist
-  checklist.forEach((c, i) => {
-    const ct = document.getElementById(`c${i+1}`); if (ct) ct.textContent = c.t;
-    const cp = document.getElementById(`c${i+1}p`);
-    if (cp) {
-      cp.textContent = c.p === 'high' ? (isTR ? 'Kritik' : 'Critical') : (isTR ? 'Orta' : 'Medium');
-      cp.className = `check-priority ${c.p === 'high' ? 'pri-high' : 'pri-med'}`;
-    }
+  checklist.forEach((c,i)=>{
+    const ct=document.getElementById(`c${i+1}`); if(ct) ct.textContent=c.t;
+    const cp=document.getElementById(`c${i+1}p`);
+    if(cp){cp.textContent=c.p==='high'?(isTR?'Kritik':'Critical'):(isTR?'Orta':'Medium');cp.className=`check-priority ${c.p==='high'?'pri-high':'pri-med'}`;}
   });
 
   // Shelter
-  const bestEl = document.querySelector('.shelter-best h4'); if (bestEl) bestEl.textContent = shelter.best;
-  const bestDescEl = document.querySelector('.shelter-best p'); if (bestDescEl) bestDescEl.textContent = shelter.bestDesc;
   try {
-    const avoidItems = document.querySelectorAll('.avoid-item');
-    shelter.avoid.forEach((a, i) => { if (avoidItems[i]) avoidItems[i].textContent = a; });
+    const bestEl=document.querySelector('.shelter-best h4'); if(bestEl) bestEl.textContent=shelter.best;
+    const bestDescEl=document.querySelector('.shelter-best p'); if(bestDescEl) bestDescEl.textContent=shelter.bestDesc;
+    const avoidItems=document.querySelectorAll('.avoid-item');
+    shelter.avoid.forEach((a,i)=>{ if(avoidItems[i]) avoidItems[i].textContent=a; });
   } catch(e){}
 
-  if (aiData) showToast(isTR ? '🤖 Gemini odanı analiz etti!' : '🤖 Gemini analyzed your room!');
+  if (aiData) showToast(isTR?'🤖 Gemini odanı analiz etti!':'🤖 Gemini analyzed your room!');
 }
 
+// ── GENERATE IMAGES WITH FAL.AI ──
+async function generateImages(roomDesc, roomLabel) {
+  const file = getUploadedFile();
+  const imgs = document.querySelectorAll('.comp-img-wrap img');
+
+  // Show original photo in slot 1 immediately
+  if (file) {
+    const dataUrl = await fileToDataUrl(file);
+    if (imgs[0]) { imgs[0].src = dataUrl; imgs[0].style.cssText = ''; }
+  }
+
+  const desc = roomDesc || roomLabel || 'living room';
+
+  const riskPrompt = `${desc}, violent earthquake scene, furniture toppling and falling, debris on floor, dust clouds, red emergency lighting, chaos and destruction, photorealistic interior`;
+  const safePrompt  = `${desc}, earthquake-safe interior design, all furniture bolted to walls, TV with anti-tip strap, clear pathways, warm organized lighting, safe and modern, photorealistic`;
+
+  try {
+    const [riskUrl, safeUrl] = await Promise.all([
+      falGenerate(riskPrompt),
+      falGenerate(safePrompt)
+    ]);
+
+    if (riskUrl && imgs[1]) { imgs[1].src = riskUrl; imgs[1].style.cssText = ''; }
+    else if (imgs[1] && file) {
+      const du = await fileToDataUrl(file);
+      imgs[1].src = du;
+      imgs[1].style.cssText = 'filter:saturate(.3) brightness(.5) contrast(1.5) sepia(.4);transform:rotate(-2deg) scale(1.04);';
+    }
+
+    if (safeUrl && imgs[2]) { imgs[2].src = safeUrl; imgs[2].style.cssText = ''; }
+    else if (imgs[2] && file) {
+      const du = await fileToDataUrl(file);
+      imgs[2].src = du;
+      imgs[2].style.cssText = 'filter:saturate(1.3) brightness(1.1) hue-rotate(12deg);';
+    }
+
+    const demoBanner = document.getElementById('demo-txt');
+    if (demoBanner && (riskUrl||safeUrl)) demoBanner.innerHTML = currentLang==='tr'
+      ? '<strong>AI Görseli</strong> — Odana özel Gemini+fal.ai ile üretildi.'
+      : '<strong>AI Generated</strong> — Room-specific, generated by Gemini+fal.ai.';
+
+    if (riskUrl||safeUrl) showToast(currentLang==='tr'?'🎨 AI görselleri hazır!':'🎨 AI images ready!');
+  } catch(err) {
+    console.error('generateImages error:', err);
+  }
+}
+
+// ── START ANALYSIS ──
 function startAnalysis() {
   if (roomsUsed>=roomLimit) {
     showToast(currentLang==='tr'?'❌ Limit doldu! Planını yükselt.':'❌ Limit reached! Upgrade plan.');
@@ -1360,39 +1233,33 @@ function startAnalysis() {
   }
   roomsUsed++; updateUsageBar();
   showScreen('screen-loading');
+
   const steps=['step-1','step-2','step-3','step-4']; let i=0;
   const activeRoom = document.querySelector('.room-btn.active:not(#q-schnell):not(#q-dev):not(#q-pro)');
   const roomId = activeRoom ? activeRoom.id.replace('r-','') : 'salon';
-  const roomNames = {tr:{salon:'salon',yatak:'yatak odası',mutfak:'mutfak',cocuk:'çocuk odası'},en:{salon:'living room',yatak:'bedroom',mutfak:'kitchen',cocuk:"children's room"}};
+  const roomNames = {tr:{salon:'salon',yatak:'yatak odası',mutfak:'mutfak',cocuk:'çocuk odası'},
+                     en:{salon:'living room',yatak:'bedroom',mutfak:'kitchen',cocuk:"children's room"}};
   const roomLabel = roomNames[currentLang][roomId] || 'salon';
+  const file = getUploadedFile();
 
-  // Get uploaded file for Gemini Vision
-  const uploadedFile = getUploadedFile();
-  let geminiAnalysisPromise = null;
-
-  if (uploadedFile) {
-    // Convert to base64 for Gemini Vision
-    const reader = new FileReader();
-    geminiAnalysisPromise = new Promise(res => {
-      reader.onload = e => {
-        const b64 = e.target.result.split(',')[1];
-        res(analyzeRoomWithGemini(roomId, b64, uploadedFile.type));
-      };
-      reader.onerror = () => res(null);
-      reader.readAsDataURL(uploadedFile);
-    });
+  // Run Gemini analysis in parallel with loading steps
+  let analysisPromise;
+  if (file) {
+    analysisPromise = fileToBase64(file).then(b64 =>
+      analyzeRoomWithGemini(roomId, b64, file.type)
+    );
   } else {
-    geminiAnalysisPromise = analyzeRoomWithGemini(roomId, null, null);
+    analysisPromise = analyzeRoomWithGemini(roomId, null, null);
   }
 
-  // Start image generation in background
-  generateImages(roomLabel);
-
-  function next(){
+  function next() {
     if(i>0){const p=document.getElementById(steps[i-1]);p.classList.remove('active');p.classList.add('done');p.querySelector('.step-icon').textContent='✓';}
     if(i<steps.length){document.getElementById(steps[i]).classList.add('active');i++;setTimeout(next,900);}
     else {
-      geminiAnalysisPromise.then(aiData => {
+      analysisPromise.then(aiData => {
+        // Use roomDesc from Gemini for better fal.ai prompts
+        const roomDesc = aiData?.roomDesc || null;
+        generateImages(roomDesc, roomLabel);
         applyAnalysisToDOM(roomId, aiData);
         saveToHistory(roomId, 5);
         updateAccountUI();
@@ -1400,7 +1267,7 @@ function startAnalysis() {
       });
     }
   }
-  setTimeout(next,300);
+  setTimeout(next, 300);
 }
 
 // ── CHAT ──
@@ -1410,131 +1277,80 @@ function toggleChat() {
   const fab = document.getElementById('chat-fab');
   panel.classList.toggle('open', chatOpen);
   fab.textContent = chatOpen ? '✕' : '💬';
-  if (chatOpen && chatHistory.length === 0) {
+  if (chatOpen && chatHistory.length===0) {
     const greeting = currentLang==='tr'
-      ? 'Merhaba! 👋 Deprem güvenliği veya ev düzenlemesi hakkında her şeyi sorabilirsin. Örneğin: "Hangi koltuk daha güvenli?", "Depremde nerede durmalıyım?" veya "Yeni aldığım dolabı nereye koymalıyım?" 🏠'
-      : 'Hello! 👋 You can ask me anything about earthquake safety or home arrangement. For example: "Which sofa is safer?", "Where should I stay during an earthquake?" or "Where should I place my new cabinet?" 🏠';
+      ? 'Merhaba! 👋 Deprem güvenliği veya ev düzenlemesi hakkında her şeyi sorabilirsin. Örneğin: "Hangi koltuk daha güvenli?", "Depremde nerede durmalıyım?" veya "Dolabı nasıl sabitleyebilirim?" 🏠'
+      : 'Hello! 👋 Ask me anything about earthquake safety or home arrangement. For example: "Which sofa is safer?", "Where should I shelter?" or "How do I anchor my cabinet?" 🏠';
     addBotMessage(greeting);
   }
 }
-
 function addBotMessage(text) {
-  const msgs = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.className = 'chat-msg bot';
-  div.innerHTML = `<div class="chat-msg-avatar">🤖</div><div class="chat-bubble">${text}</div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-  chatHistory.push({role:'assistant', content:text});
+  const msgs=document.getElementById('chat-messages');
+  const div=document.createElement('div'); div.className='chat-msg bot';
+  div.innerHTML=`<div class="chat-msg-avatar">🤖</div><div class="chat-bubble">${text}</div>`;
+  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
+  chatHistory.push({role:'assistant',content:text});
 }
-
 function addUserMessage(text) {
-  const msgs = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.className = 'chat-msg user';
-  div.innerHTML = `<div class="chat-msg-avatar">${loggedInUser ? loggedInUser.initials[0] : '👤'}</div><div class="chat-bubble">${text}</div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-  chatHistory.push({role:'user', content:text});
+  const msgs=document.getElementById('chat-messages');
+  const div=document.createElement('div'); div.className='chat-msg user';
+  div.innerHTML=`<div class="chat-msg-avatar">${loggedInUser?loggedInUser.initials[0]:'👤'}</div><div class="chat-bubble">${text}</div>`;
+  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
+  chatHistory.push({role:'user',content:text});
 }
-
 function showTyping() {
-  const msgs = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.className = 'chat-msg bot'; div.id = 'typing-indicator';
-  div.innerHTML = `<div class="chat-msg-avatar">🤖</div><div class="chat-typing"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
+  const msgs=document.getElementById('chat-messages');
+  const div=document.createElement('div'); div.className='chat-msg bot'; div.id='typing-indicator';
+  div.innerHTML=`<div class="chat-msg-avatar">🤖</div><div class="chat-typing"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
 }
-
-function removeTyping() {
-  const t = document.getElementById('typing-indicator');
-  if (t) t.remove();
-}
-
-async function callGemini(promptText, imageBase64, imageMime) {
-  const parts = [];
-  if (imageBase64) {
-    parts.push({ inline_data: { mime_type: imageMime || 'image/jpeg', data: imageBase64 } });
-  }
-  parts.push({ text: promptText });
-
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
-    })
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    console.error('Gemini error:', err);
-    return null;
-  }
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
-}
+function removeTyping() { const t=document.getElementById('typing-indicator'); if(t) t.remove(); }
 
 async function sendChatMessage() {
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  document.getElementById('chat-suggestions').style.display = 'none';
+  const input=document.getElementById('chat-input');
+  const text=input.value.trim(); if(!text) return;
+  input.value='';
+  document.getElementById('chat-suggestions').style.display='none';
   addUserMessage(text);
   showTyping();
   try {
-    const systemPrompt = currentLang === 'tr'
-      ? `Sen QuakeReady uygulamasının yapay zeka asistanısın. Deprem güvenliği, ev düzeni ve mobilya seçimi konusunda uzman Türk bir danışmansın. Kısa, net ve pratik cevaplar ver. Emoji kullanabilirsin. Sadece Türkçe cevap ver. Önceki mesajlar:\n`
-      : `You are the AI assistant of QuakeReady app, an expert earthquake safety consultant. Give short, clear, practical answers. You can use emojis. Answer in English only. Previous messages:\n`;
-
-    const history = chatHistory.slice(-8).map(m => `${m.role === 'user' ? 'Kullanıcı' : 'Asistan'}: ${m.content}`).join('\n');
-    const fullPrompt = systemPrompt + history + `\nKullanıcı: ${text}\nAsistan:`;
-
-    const reply = await callGemini(fullPrompt);
+    const sys = currentLang==='tr'
+      ? 'Sen QuakeReady uygulamasının deprem güvenliği uzmanı yapay zeka asistanısın. Türk evlerine özel, pratik ve kısa cevaplar ver. Emoji kullan. Sadece Türkçe yaz.'
+      : 'You are QuakeReady AI, earthquake safety expert. Give short practical advice specific to home safety. Use emojis. Answer in English only.';
+    const hist = chatHistory.slice(-8).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.content}`).join('\n');
+    const prompt = `${sys}\n\nConversation:\n${hist}\nUser: ${text}\nAssistant:`;
+    const reply = await gemini(prompt);
     removeTyping();
-    addBotMessage(reply || (currentLang==='tr' ? 'Bir hata oluştu, tekrar dene.' : 'An error occurred, try again.'));
+    addBotMessage(reply || (currentLang==='tr'?'Bir sorun oluştu, tekrar dene.':'Something went wrong, try again.'));
   } catch(err) {
     removeTyping();
-    addBotMessage(currentLang==='tr' ? '⚠️ Bağlantı hatası, tekrar dene.' : '⚠️ Connection error, try again.');
+    console.error('chat error:', err);
+    addBotMessage(currentLang==='tr'?'⚠️ Bağlantı hatası, tekrar dene.':'⚠️ Connection error, try again.');
   }
 }
-
-function sendSuggestion(el) {
-  document.getElementById('chat-input').value = el.textContent;
-  sendChatMessage();
-}
-
-function chatKeyDown(e) {
-  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
-}
+function sendSuggestion(el){document.getElementById('chat-input').value=el.textContent;sendChatMessage();}
+function chatKeyDown(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChatMessage();}}
 
 // ── MODAL ──
-function openModal(id) {
-  document.getElementById(id).classList.add('open');
-}
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-}
-document.addEventListener('click', e => {
-  document.querySelectorAll('.modal-overlay').forEach(m => {
-    if (e.target === m) m.classList.remove('open');
-  });
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.addEventListener('click',e=>{
+  document.querySelectorAll('.modal-overlay').forEach(m=>{if(e.target===m)m.classList.remove('open');});
 });
 
 // ── MISC ──
-function showScreen(id) {
+function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo({top:0,behavior:'smooth'});
-  if (id === 'screen-results' || id === 'screen-upload') {
+  if(id==='screen-results'||id==='screen-upload'){
     document.getElementById('chat-fab').classList.add('show');
   } else {
     document.getElementById('chat-fab').classList.remove('show');
-    if (chatOpen) toggleChat();
+    if(chatOpen) toggleChat();
   }
 }
+
 function toggleCheck(item){ item.classList.toggle('checked'); }
 function goBack(){ showScreen('screen-upload'); }
 function openDrawer(panel){
