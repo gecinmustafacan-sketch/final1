@@ -879,7 +879,7 @@ h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-
 
 // ── API CONFIG ──
 const GEMINI_MODELS = ['gemini-2.5-flash'];
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1/models';
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const STORAGE_KEYS = { gemini:'qr_gemini_key', fal:'qr_fal_key' };
 const appSecrets = {
  gemini: 'AIzaSyCQ_KsBoAsCFMSJ9hQCktr-TrDdVsMtXUo',
@@ -1179,8 +1179,7 @@ const ANALYSIS_SCHEMA = {
     safeImagePrompt: { type: 'string' },
     risks: {
       type: 'array',
-      minItems: 5,
-      maxItems: 5,
+     
       items: {
         type: 'object',
         properties: {
@@ -1194,8 +1193,7 @@ const ANALYSIS_SCHEMA = {
     },
     checklist: {
       type: 'array',
-      minItems: 5,
-      maxItems: 5,
+     
       items: {
         type: 'object',
         properties: {
@@ -1214,13 +1212,13 @@ const ANALYSIS_SCHEMA = {
         secondDesc: { type: 'string' },
         third: { type: 'string' },
         thirdDesc: { type: 'string' },
-        avoid: { type: 'array', minItems: 4, maxItems: 4, items: { type: 'string' } }
+        avoid: { type: 'array', items: { type: 'string' } }
       },
       required: ['best', 'bestDesc', 'second', 'secondDesc', 'third', 'thirdDesc', 'avoid']
     },
     riskMarkers: {
       type: 'array',
-      maxItems: 3,
+    
       items: {
         type: 'object',
         properties: {
@@ -1233,7 +1231,7 @@ const ANALYSIS_SCHEMA = {
     },
     safeMarkers: {
       type: 'array',
-      maxItems: 3,
+     
       items: {
         type: 'object',
         properties: {
