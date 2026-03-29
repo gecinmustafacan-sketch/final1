@@ -878,7 +878,7 @@ h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ── API CONFIG (GROQ + FAL.AI) ──
 const GROQ_API_KEY = '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';
-const GROQ_VISION_MODEL = 'llama-3.2-90b-vision-preview';
+const GROQ_VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
 const GROQ_CHAT_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
  
@@ -974,13 +974,13 @@ async function groqVision(systemPrompt, userText, imageBase64, imageMime) {
       console.error('[QR] Groq vision HTTP error:', res.status, errText.slice(0, 500));
       showToast('❌ Groq vision: HTTP ' + res.status);
       // If 90b fails, try 11b
-      if (GROQ_VISION_MODEL.includes('90b')) {
-        console.log('[QR] Retrying with 11b model...');
+      if (GROQ_VISION_MODEL.includes('scout')) {
+        console.log('[QR] Retrying with llama-4-maverick...');
         const res2 = await fetch(GROQ_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
           body: JSON.stringify({
-            model: 'llama-3.2-11b-vision-preview',
+            model: 'meta-llama/llama-4-maverick-17b-128e-instruct',
             messages: [{ role: 'user', content: [
               { type: 'text', text: systemPrompt + '\n\n' + userText },
               { type: 'image_url', image_url: { url: dataUrl } }
@@ -991,7 +991,7 @@ async function groqVision(systemPrompt, userText, imageBase64, imageMime) {
         if (res2.ok) {
           const data2 = await res2.json();
           const text2 = data2?.choices?.[0]?.message?.content?.trim();
-          console.log('[QR] Groq 11b fallback OK, length:', text2?.length);
+          console.log('[QR] Groq maverick fallback OK, length:', text2?.length);
           return text2 || null;
         }
       }
@@ -1650,10 +1650,7 @@ function setLang(lang) {
  
 console.log('[QR] ✅ QuakeReady loaded with Groq AI');
  
- 
 
-
- 
 </script>
 </body>
 </html>
