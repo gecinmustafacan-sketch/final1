@@ -1896,6 +1896,179 @@ setTimeout(() => {
     showToast(currentLang==='tr' ? '🔑 İlk kullanım için API anahtarlarını gir.' : '🔑 Enter API keys on first use.');
   }
 }, 600);
+  async function geminiRequest({ prompt, imageBase64 = null, imageMime = null, jsonSchema = null, temperature = 0.35, maxOutputTokens = 1400 }) {
+  const ok = await ensureApiKeys('gemini');
+  if (!ok) return null;
+ 
+  const parts = [];
+  if (imageBase64 && imageMime) {
+    parts.push({ inline_data: { mime_type: imageMime, data: imageBase64 } });
+  }
+  parts.push({ text: prompt });
+ 
+  for (const model of GEMINI_MODELS) {
+    try {
+      console.log('[QR] Gemini request to', model, 'prompt length:', prompt.length);
+      const res = await fetch(`${GEMINI_API_BASE}/${model}:generateContent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': appSecrets.gemini
+        },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts }],
+          generationConfig: {
+            temperature,
+            maxOutputTokens
+            // responseSchema KALDIRILDI - sorun buydu
+          }
+        })
+      });
+ 
+      if (!res.ok) {
+        const errBody = await res.text();
+        console.error('[QR] Gemini HTTP ERROR', model, res.status, errBody.slice(0, 200));
+        showToast('❌ Gemini HTTP ' + res.status);
+        continue;
+      }
+ 
+      const data = await res.json();
+      if (data.error) {
+        console.error('[QR] Gemini API error', model, data.error);
+        showToast('❌ Gemini: ' + (data.error?.message || 'API error'));
+        continue;
+      }
+ 
+      const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('').trim();
+      console.log('[QR] Gemini response length:', text?.length, 'preview:', text?.slice(0, 100));
+      if (text) return text;
+    } catch (err) {
+      console.error('[QR] geminiRequest error:', model, err);
+      showToast('❌ Gemini: ' + (err?.message || String(err)).slice(0, 60));
+    }
+  }
+  return null;
+}
+ 
+// FIX: geminiJson - Schema'yi API'ye gonderme, prompt'ta JSON iste
+async function geminiJson(prompt, schema, imageBase64 = null, imageMime = null, opts = {}) {
+  const jsonPrompt = prompt + '\n\nCRITICAL: Return ONLY valid JSON. No markdown backticks, no explanation, no extra text. Start with { and end with }';
+  const raw = await geminiRequest({ prompt: jsonPrompt, imageBase64, imageMime, ...opts });
+  if (!raw) {
+    console.error('[QR] geminiJson: Gemini returned null');
+    showToast('❌ AI yanit vermedi');
+    return null;
+  }
+  try {
+    // Markdown code block varsa temizle
+    let cleaned = raw;
+    if (cleaned.includes('```')) {
+      cleaned = cleaned.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    }
+    cleaned = cleaned.trim();
+    // Bazen Gemini basa/sona bosluk veya text ekler
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+    }
+    const parsed = JSON.parse(cleaned);
+    console.log('[QR] geminiJson parsed OK, keys:', Object.keys(parsed));
+    return parsed;
+  } catch (err) {
+    console.error('[QR] geminiJson parse error:', err.message, 'raw preview:', raw?.slice(0, 300));
+    showToast('❌ JSON parse hatasi');
+    return null;
+  }
+}
+ 
+// FIX: analyzeRoomWithGemini - Schema olmadan calistir
+async function analyzeRoomWithGemini(roomId, b64, mime) {
+  const isTR = currentLang === 'tr';
+  const roomLabelTR = {salon:'salon',yatak:'yatak odası',mutfak:'mutfak',cocuk:'çocuk odası'};
+  const roomLabelEN = {salon:'living room',yatak:'bedroom',mutfak:'kitchen',cocuk:"children's room"};
+  const rl = isTR ? (roomLabelTR[roomId]||'oda') : (roomLabelEN[roomId]||'room');
+ 
+  const prompt = isTR
+    ? `Sen QuakeReady icin deprem guvenligi uzmanisin. Kullanici bir ${rl} fotografi yukledi.
+Gorevin:
+1) Fotograftaki gercek esyalara dayanarak 5 somut deprem riski cikar.
+2) Kisa, dogal Turkce yaz.
+3) Saklanma alanini odaya gore oner.
+4) Gorsel uzeri etiketler icin yaklasik konum ver. x ve y degerleri 8 ile 92 arasinda olmali.
+5) riskImagePrompt ve safeImagePrompt alanlarini INGILIZCE yaz; fal.ai gorsel uretecek.
+6) riskImagePrompt mevcut odanin duzenini koruyup deprem aninda neyin devrildigini anlatsin.
+7) safeImagePrompt ayni odayi daha guvenli yerlesimle anlatsin.
+8) summary alani 1 cumle olsun.
+ 
+Asagidaki JSON formatinda SADECE JSON dondur (baska hicbir sey yazma):
+{
+  "summary": "...",
+  "roomDesc": "...",
+  "riskImagePrompt": "...",
+  "safeImagePrompt": "...",
+  "risks": [{"icon":"emoji","title":"...","desc":"...","severity":"high veya medium"}],
+  "checklist": [{"text":"...","priority":"high veya medium"}],
+  "shelter": {"best":"...","bestDesc":"...","second":"...","secondDesc":"...","third":"...","thirdDesc":"...","avoid":["...","...","...","..."]},
+  "riskMarkers": [{"label":"...","x":30,"y":40}],
+  "safeMarkers": [{"label":"...","x":30,"y":40}]
+}`
+    : `You are the QuakeReady earthquake safety expert. The user uploaded a ${rl} photo.
+Extract 5 concrete earthquake risks from the actual items in the photo.
+Return ONLY this JSON format (nothing else):
+{
+  "summary": "one sentence",
+  "roomDesc": "brief room description",
+  "riskImagePrompt": "English prompt for fal.ai showing this room during earthquake",
+  "safeImagePrompt": "English prompt for fal.ai showing this room safely rearranged",
+  "risks": [{"icon":"emoji","title":"...","desc":"...","severity":"high or medium"}],
+  "checklist": [{"text":"...","priority":"high or medium"}],
+  "shelter": {"best":"...","bestDesc":"...","second":"...","secondDesc":"...","third":"...","thirdDesc":"...","avoid":["...","...","...","..."]},
+  "riskMarkers": [{"label":"...","x":30,"y":40}],
+  "safeMarkers": [{"label":"...","x":30,"y":40}]
+}`;
+ 
+  console.log('[QR] Analyzing room:', roomId, 'image size:', b64?.length);
+  return geminiJson(prompt, null, b64, mime, { temperature: 0.2, maxOutputTokens: 2000 });
+}
+ 
+// FIX: sendChatMessage - Hata gosterimi
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  document.getElementById('chat-suggestions').style.display = 'none';
+  addUserMessage(text);
+  showTyping();
+  try {
+    const sys = currentLang === 'tr'
+      ? 'Sen QuakeReady uygulamasinin deprem guvenligi uzmani yapay zeka asistanisin. Kisa, net, pratik ve dogal Turkce cevaplar ver. Emoji kullanabilirsin.'
+      : 'You are QuakeReady AI, an earthquake safety expert. Give concise, practical answers.';
+    const hist = chatHistory.slice(-8).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
+    const roomCtx = buildRoomContextForChat();
+    const prompt = `${sys}\n\n${roomCtx ? roomCtx + '\n\n' : ''}Conversation:\n${hist}\nUser: ${text}\nAssistant:`;
+    console.log('[QR] Chat prompt length:', prompt.length);
+    const reply = await geminiText(prompt, null, null, { temperature: 0.45, maxOutputTokens: 500 });
+    removeTyping();
+    if (reply) {
+      console.log('[QR] Chat reply:', reply.slice(0, 100));
+      addBotMessage(reply);
+    } else {
+      console.warn('[QR] Chat: Gemini returned null, using fallback');
+      showToast('⚠️ AI yanit veremedi, yerel cevap gosteriliyor');
+      addBotMessage(localChatFallback(text));
+    }
+  } catch (err) {
+    removeTyping();
+    console.error('[QR] Chat error:', err);
+    showToast('❌ Chat hatasi: ' + (err?.message || ''));
+    addBotMessage(localChatFallback(text));
+  }
+}
+ 
+console.log('[QR] ✅ QuakeReady JS patches loaded successfully');
+ 
 </script>
 </body>
 </html>
