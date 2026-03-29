@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuakeReady</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script type="module">
+  import { fal } from 'https://esm.sh/@fal-ai/client';
+  window._falClient = fal;
+</script>
+<style>
+:root{--bg:#0a0a0f;--surface:#13131a;--surface2:#1c1c27;--border:#2a2a3a;--accent:#ff4d2e;--accent2:#ff8c42;--safe:#22c55e;--text:#f0f0f5;--muted:#7070a0;--warning:#fbbf24;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;background:rgba(10,10,15,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;display:flex;align-items:center;gap:8px;}
+.logo-dot{width:9px;height:9px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.4);opacity:.7}}
+.nav-right{display:flex;align-items:center;gap:8px;}
+.nav-icon-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.95rem;transition:all .2s;}
+.nav-icon-btn:hover{border-color:var(--accent);background:rgba(255,77,46,.1);}
+.nav-badge{font-size:.7rem;background:rgba(255,77,46,.15);color:var(--accent);border:1px solid rgba(255,77,46,.3);padding:4px 10px;border-radius:20px;font-weight:600;cursor:pointer;user-select:none;}
+.nav-plan-badge{font-size:.7rem;background:rgba(34,197,94,.15);color:var(--safe);border:1px solid rgba(34,197,94,.3);padding:4px 10px;border-radius:20px;font-weight:600;display:none;}
+
+/* DRAWER */
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;opacity:0;pointer-events:none;transition:opacity .3s;}
+.drawer-overlay.open{opacity:1;pointer-events:all;}
+.settings-drawer{position:fixed;top:0;right:0;bottom:0;width:360px;max-width:100vw;background:var(--surface);border-left:1px solid var(--border);z-index:301;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);overflow-y:auto;}
+.settings-drawer.open{transform:translateX(0);}
+.drawer-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);z-index:1;}
+.drawer-header h2{font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;}
+.drawer-close{font-size:1.2rem;cursor:pointer;color:var(--muted);padding:4px;}
+.drawer-section{padding:18px 22px;border-bottom:1px solid var(--border);}
+.drawer-section:last-child{border-bottom:none;}
+.drawer-section-title{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px;}
+.lang-toggle{display:flex;gap:8px;}
+.lang-btn{flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-size:.88rem;font-weight:500;transition:all .2s;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;}
+.lang-btn.active{border-color:var(--accent);color:var(--text);background:rgba(255,77,46,.1);}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;}
+.setting-label{font-size:.88rem;color:var(--text);}
+.setting-sub{font-size:.76rem;color:var(--muted);margin-top:2px;}
+.toggle-switch{width:42px;height:22px;border-radius:11px;background:var(--border);cursor:pointer;position:relative;transition:background .25s;flex-shrink:0;}
+.toggle-switch.on{background:var(--accent);}
+.toggle-switch::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:white;transition:transform .25s;}
+.toggle-switch.on::after{transform:translateX(20px);}
+.help-form{display:flex;flex-direction:column;gap:9px;}
+.help-input,.help-textarea{background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-size:.86rem;font-family:'DM Sans',sans-serif;transition:border-color .2s;outline:none;resize:none;}
+.help-input:focus,.help-textarea:focus{border-color:var(--accent);}
+.help-textarea{min-height:80px;}
+.help-submit{padding:11px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:white;font-size:.88rem;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;}
+.help-sent{display:none;text-align:center;padding:18px;color:var(--safe);font-weight:600;}
+.faq-item{background:var(--surface2);border-radius:12px;padding:13px 15px;border:1px solid var(--border);margin-bottom:9px;}
+.faq-q{font-size:.86rem;font-weight:600;margin-bottom:4px;}
+.faq-a{font-size:.78rem;color:var(--muted);line-height:1.5;}
+.version-info{font-size:.76rem;color:var(--muted);line-height:1.8;}
+.version-info a{color:var(--accent);text-decoration:none;}
+
+/* MODAL BASE */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:none;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;width:100%;max-width:520px;max-height:82vh;display:flex;flex-direction:column;}
+.modal-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.modal-header h3{font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;}
+.modal-close{font-size:1.3rem;cursor:pointer;color:var(--muted);}
+.modal-body{padding:20px 24px;overflow-y:auto;font-size:.84rem;color:var(--muted);line-height:1.8;}
+.modal-body h4{color:var(--text);font-size:.88rem;font-weight:600;margin:16px 0 5px;}
+.modal-body h4:first-child{margin-top:0;}
+.modal-body p{margin-bottom:8px;}
+.modal-date{font-size:.74rem;color:var(--muted);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+
+/* ACCOUNT PICKER MODAL */
+.account-picker{max-width:380px;}
+.account-list{display:flex;flex-direction:column;gap:10px;padding:20px 22px;}
+.account-item{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--surface2);border:1.5px solid var(--border);border-radius:14px;cursor:pointer;transition:all .25s;}
+.account-item:hover{border-color:var(--accent);background:rgba(255,77,46,.06);}
+.account-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--border);}
+.account-avatar-text{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;flex-shrink:0;color:white;}
+.account-info h4{font-size:.9rem;font-weight:600;margin-bottom:2px;}
+.account-info p{font-size:.78rem;color:var(--muted);}
+.account-check{margin-left:auto;color:var(--safe);font-size:1.1rem;opacity:0;transition:opacity .2s;}
+.account-item:hover .account-check{opacity:1;}
+.account-add{display:flex;align-items:center;gap:14px;padding:12px 16px;border:1.5px dashed var(--border);border-radius:14px;cursor:pointer;color:var(--muted);font-size:.86rem;transition:all .25s;}
+.account-add:hover{border-color:var(--accent);color:var(--accent);}
+
+/* PAYMENT MODAL */
+.payment-modal-box{max-width:440px;}
+.payment-plan-header{background:linear-gradient(135deg,rgba(255,77,46,.12),rgba(255,140,66,.08));border-bottom:1px solid var(--border);padding:20px 24px;}
+.payment-plan-name{font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:800;display:flex;align-items:center;gap:10px;margin-bottom:4px;}
+.payment-plan-price{font-size:.9rem;color:var(--muted);}
+.payment-plan-price strong{color:var(--text);font-size:1.1rem;}
+.payment-form{padding:20px 24px;display:flex;flex-direction:column;gap:12px;}
+.pay-label{font-size:.76rem;color:var(--muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;}
+.pay-input{width:100%;padding:12px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:11px;color:var(--text);font-size:.9rem;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+.pay-input:focus{border-color:var(--accent);}
+.pay-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.pay-btn{width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;color:white;font-size:.95rem;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif;transition:all .3s;box-shadow:0 6px 24px rgba(255,77,46,.3);margin-top:4px;}
+.pay-btn:hover{transform:translateY(-1px);box-shadow:0 10px 32px rgba(255,77,46,.45);}
+.pay-secure{display:flex;align-items:center;justify-content:center;gap:6px;font-size:.74rem;color:var(--muted);margin-top:6px;}
+
+/* SCREENS */
+.screen{display:none;min-height:100vh;position:relative;z-index:1;}
+.screen.active{display:flex;flex-direction:column;}
+
+/* AUTH */
+#screen-auth{align-items:center;justify-content:center;padding:60px 24px;}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:40px 32px;width:100%;max-width:420px;}
+.auth-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;}
+.auth-logo-dot{width:12px;height:12px;background:var(--accent);border-radius:50%;animation:pulse 2s infinite;}
+.auth-tagline{color:var(--muted);font-size:.88rem;margin-bottom:32px;text-align:center;}
+.auth-tabs{display:flex;background:var(--surface2);border-radius:12px;padding:4px;margin-bottom:28px;}
+.auth-tab{flex:1;padding:9px;border-radius:9px;border:none;background:transparent;color:var(--muted);font-size:.9rem;font-weight:500;cursor:pointer;transition:all .25s;font-family:'DM Sans',sans-serif;}
+.auth-tab.active{background:var(--surface);color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.3);}
+.social-btn{width:100%;padding:13px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:.92rem;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;transition:all .25s;font-family:'DM Sans',sans-serif;}
+.social-btn:hover{border-color:var(--accent);background:rgba(255,77,46,.06);}
+.divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:var(--muted);font-size:.8rem;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+.pass-wrap{position:relative;margin-bottom:10px;}
+.auth-input{width:100%;padding:12px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:11px;color:var(--text);font-size:.9rem;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+.auth-input:focus{border-color:var(--accent);}
+.pass-eye{position:absolute;right:14px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:1rem;padding:2px;transition:color .2s;}
+.pass-eye:hover{color:var(--text);}
+.auth-primary-btn{width:100%;padding:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;color:white;font-size:.95rem;font-weight:700;cursor:pointer;font-family:'Syne',sans-serif;margin-top:4px;transition:all .3s;box-shadow:0 6px 24px rgba(255,77,46,.3);}
+.auth-primary-btn:hover{transform:translateY(-1px);box-shadow:0 10px 32px rgba(255,77,46,.45);}
+.auth-terms{font-size:.75rem;color:var(--muted);margin-top:16px;line-height:1.7;text-align:center;}
+.auth-terms a{color:var(--accent);text-decoration:none;cursor:pointer;}
+
+/* PRICING */
+#screen-pricing{align-items:center;justify-content:center;padding:100px 24px 60px;text-align:center;}
+.pricing-header{margin-bottom:44px;}
+.pricing-header h2{font-family:'Syne',sans-serif;font-size:clamp(1.8rem,4vw,2.8rem);font-weight:800;margin-bottom:12px;}
+.pricing-header p{color:var(--muted);font-size:1rem;max-width:440px;margin:0 auto;}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:820px;width:100%;}
+@media(max-width:700px){.pricing-grid{grid-template-columns:1fr;max-width:360px;}}
+.plan-card{background:var(--surface);border:1.5px solid var(--border);border-radius:20px;padding:28px 22px;text-align:center;position:relative;transition:all .3s;cursor:pointer;}
+.plan-card:hover{transform:translateY(-4px);border-color:var(--accent);}
+.plan-card.popular{border-color:var(--accent);background:rgba(255,77,46,.04);}
+.popular-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-size:.7rem;font-weight:700;padding:4px 14px;border-radius:20px;white-space:nowrap;}
+.plan-icon{font-size:2.2rem;margin-bottom:14px;}
+.plan-name{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;margin-bottom:6px;}
+.plan-price{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;}
+.plan-price span{font-size:1rem;color:var(--muted);font-weight:400;}
+.plan-rooms{font-size:.82rem;color:var(--muted);margin:8px 0 18px;}
+.plan-features{list-style:none;display:flex;flex-direction:column;gap:8px;margin-bottom:22px;text-align:left;}
+.plan-features li{font-size:.82rem;color:var(--muted);display:flex;align-items:center;gap:8px;}
+.plan-features li::before{content:'✓';color:var(--safe);font-weight:700;flex-shrink:0;}
+.plan-features li.no::before{content:'✕';color:var(--border);}
+.plan-features li.no{color:var(--border);}
+.plan-btn{width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:.9rem;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;transition:all .25s;}
+.plan-btn:hover,.plan-card.popular .plan-btn{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:white;box-shadow:0 6px 20px rgba(255,77,46,.3);}
+
+/* UPLOAD */
+#screen-upload{align-items:center;justify-content:center;text-align:center;padding:100px 24px 60px;}
+.hero-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(255,77,46,.1);border:1px solid rgba(255,77,46,.25);color:var(--accent2);font-size:.76rem;font-weight:500;padding:5px 13px;border-radius:20px;margin-bottom:26px;letter-spacing:.04em;text-transform:uppercase;}
+h1{font-family:'Syne',sans-serif;font-size:clamp(2rem,5.5vw,3.8rem);font-weight:800;line-height:1.1;margin-bottom:18px;}
+h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero-sub{font-size:1rem;color:var(--muted);max-width:480px;line-height:1.7;margin-bottom:40px;}
+.upload-zone{width:100%;max-width:520px;border:2px dashed var(--border);border-radius:20px;padding:44px 26px;cursor:pointer;transition:all .3s;background:var(--surface);}
+.upload-zone:hover{border-color:var(--accent);background:rgba(255,77,46,.04);transform:translateY(-2px);}
+.upload-icon{width:56px;height:56px;background:linear-gradient(135deg,rgba(255,77,46,.2),rgba(255,140,66,.15));border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px;}
+.upload-zone h3{font-family:'Syne',sans-serif;font-size:1rem;font-weight:700;margin-bottom:6px;}
+.upload-zone p{color:var(--muted);font-size:.84rem;}
+#file-input{display:none;}
+#preview-thumb{display:none;width:100%;max-width:320px;height:180px;object-fit:cover;border-radius:12px;margin-top:14px;border:2px solid var(--border);}
+.room-select{display:flex;gap:8px;margin-top:22px;flex-wrap:wrap;justify-content:center;}
+.room-btn{padding:8px 16px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-size:.84rem;cursor:pointer;transition:all .25s;font-family:'DM Sans',sans-serif;}
+.room-btn.active,.room-btn:hover{border-color:var(--accent);color:var(--text);background:rgba(255,77,46,.1);}
+.analyze-btn{margin-top:22px;padding:14px 40px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;border:none;border-radius:14px;font-size:.95rem;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;transition:all .3s;box-shadow:0 8px 28px rgba(255,77,46,.3);}
+.analyze-btn:hover{transform:translateY(-2px);}
+.usage-bar-wrap{margin-top:18px;max-width:520px;width:100%;}
+.usage-bar-label{font-size:.78rem;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:6px;}
+.usage-bar-track{height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+.usage-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px;transition:width .5s;}
+
+/* LOADING */
+#screen-loading{align-items:center;justify-content:center;text-align:center;gap:26px;}
+.loading-orb{width:86px;height:86px;border-radius:50%;background:radial-gradient(circle at 35% 35%,var(--accent2),var(--accent));animation:orbFloat 3s ease-in-out infinite,orbGlow 2s ease-in-out infinite;position:relative;}
+.loading-orb::after{content:'';position:absolute;inset:-12px;border-radius:50%;border:2px solid rgba(255,77,46,.3);animation:ringPulse 2s ease-out infinite;}
+@keyframes orbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes orbGlow{0%,100%{box-shadow:0 0 40px rgba(255,77,46,.4)}50%{box-shadow:0 0 80px rgba(255,77,46,.7)}}
+@keyframes ringPulse{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.5);opacity:0}}
+.loading-steps{display:flex;flex-direction:column;gap:9px;max-width:300px;}
+.loading-step{display:flex;align-items:center;gap:11px;padding:10px 15px;background:var(--surface);border-radius:12px;border:1px solid var(--border);opacity:.3;transition:all .5s;text-align:left;font-size:.86rem;}
+.loading-step.done{opacity:1;border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.05);}
+.loading-step.active{opacity:1;border-color:rgba(255,77,46,.4);background:rgba(255,77,46,.05);}
+.step-icon{font-size:1rem;flex-shrink:0;}
+
+/* RESULTS */
+#screen-results{padding:88px 20px 100px;max-width:1060px;margin:0 auto;width:100%;}
+.results-header{text-align:center;margin-bottom:36px;}
+.results-header h2{font-family:'Syne',sans-serif;font-size:clamp(1.6rem,4vw,2.4rem);font-weight:800;margin-bottom:10px;}
+.risk-score-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:30px;font-weight:600;font-size:.86rem;}
+.risk-high{background:rgba(255,77,46,.15);border:1px solid rgba(255,77,46,.4);color:var(--accent);}
+.stats-bar{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-bottom:32px;}
+.stat-chip{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface);border:1px solid var(--border);border-radius:30px;font-size:.82rem;}
+.stat-chip strong{color:var(--text);font-weight:700;}
+.stat-chip span{color:var(--muted);}
+.demo-banner{background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.22);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:24px;font-size:.81rem;color:var(--warning);}
+.risks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:11px;margin-bottom:36px;}
+.risk-card{padding:15px;border-radius:14px;border:1px solid var(--border);background:var(--surface);display:flex;gap:11px;align-items:flex-start;animation:cardIn .4s ease forwards;opacity:0;transform:translateY(14px);}
+@keyframes cardIn{to{opacity:1;transform:translateY(0)}}
+.risk-card:nth-child(1){animation-delay:.1s}.risk-card:nth-child(2){animation-delay:.2s}.risk-card:nth-child(3){animation-delay:.3s}.risk-card:nth-child(4){animation-delay:.4s}.risk-card:nth-child(5){animation-delay:.5s}
+.risk-icon-wrap{width:36px;height:36px;border-radius:10px;background:rgba(255,77,46,.12);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;}
+.risk-card h4{font-weight:600;font-size:.86rem;margin-bottom:3px;}
+.risk-card p{font-size:.76rem;color:var(--muted);line-height:1.5;}
+.severity{display:inline-block;font-size:.66rem;font-weight:600;padding:2px 7px;border-radius:6px;margin-top:4px;text-transform:uppercase;letter-spacing:.04em;}
+.sev-high{background:rgba(255,77,46,.2);color:var(--accent);}
+.sev-med{background:rgba(251,191,36,.2);color:var(--warning);}
+
+/* SAFEST SPOT */
+.safest-spot-section{background:linear-gradient(135deg,rgba(34,197,94,.07),rgba(59,130,246,.04));border:1.5px solid rgba(34,197,94,.28);border-radius:20px;padding:26px;margin-bottom:36px;animation:cardIn .5s .15s ease forwards;opacity:0;transform:translateY(14px);}
+.safest-spot-section h3{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:9px;color:var(--safe);}
+.spot-sub{font-size:.82rem;color:var(--muted);margin-bottom:18px;}
+.spot-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+@media(max-width:580px){.spot-grid{grid-template-columns:1fr;}}
+.spot-card{padding:15px 16px;border-radius:13px;border:1px solid var(--border);background:var(--surface2);display:flex;gap:11px;align-items:flex-start;}
+.spot-card.best{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.07);grid-column:span 2;}
+@media(max-width:580px){.spot-card.best{grid-column:span 1;}}
+.spot-emoji{font-size:1.6rem;flex-shrink:0;}
+.spot-card h4{font-weight:600;font-size:.88rem;margin-bottom:3px;}
+.spot-card p{font-size:.78rem;color:var(--muted);line-height:1.5;}
+.best-badge{display:inline-block;background:var(--safe);color:white;font-size:.66rem;font-weight:700;padding:2px 7px;border-radius:6px;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;}
+.spot-dont{margin-top:14px;padding:13px 15px;background:rgba(255,77,46,.07);border:1px solid rgba(255,77,46,.2);border-radius:12px;}
+.spot-dont-title{font-size:.76rem;font-weight:600;color:var(--accent);margin-bottom:7px;text-transform:uppercase;letter-spacing:.04em;}
+.spot-dont ul{list-style:none;display:flex;flex-direction:column;gap:5px;}
+.spot-dont li{font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:8px;}
+.spot-dont li::before{content:'✕';color:var(--accent);font-weight:700;font-size:.72rem;}
+
+/* POSITION - SVG ILLUSTRATIONS */
+.position-section{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px;margin-bottom:36px;animation:cardIn .5s .2s ease forwards;opacity:0;transform:translateY(14px);}
+.position-section h3{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:9px;}
+.position-sub{font-size:.82rem;color:var(--muted);margin-bottom:22px;}
+.position-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+@media(max-width:650px){.position-grid{grid-template-columns:1fr;}}
+.pos-card{border-radius:16px;border:1px solid var(--border);background:var(--surface2);overflow:hidden;}
+.pos-card .pos-label{padding:16px;}
+.pos-svg-wrap{width:100%;aspect-ratio:4/3;display:block;position:relative;}
+.pos-svg-wrap svg{width:100%;height:100%;}
+.pos-label{padding:14px 16px;}
+.pos-step-badge{display:inline-block;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-family:'Syne',sans-serif;font-size:.72rem;font-weight:800;padding:3px 10px;border-radius:7px;margin-bottom:7px;letter-spacing:.04em;}
+.pos-name{font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;margin-bottom:5px;}
+.pos-desc{font-size:.8rem;color:var(--muted);line-height:1.55;}
+.pos-tip{margin-top:8px;font-size:.76rem;background:rgba(255,77,46,.07);border:1px solid rgba(255,77,46,.14);border-radius:8px;padding:7px 10px;color:var(--accent2);line-height:1.5;}
+
+/* BAG */
+.bag-section{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:26px;margin-bottom:36px;animation:cardIn .5s .25s ease forwards;opacity:0;transform:translateY(14px);}
+.bag-section h3{font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:9px;}
+.bag-sub{font-size:.82rem;color:var(--muted);margin-bottom:18px;}
+.bag-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:10px;}
+.bag-item{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--surface2);border-radius:12px;border:1px solid var(--border);}
+.bag-emoji{font-size:1.3rem;flex-shrink:0;}
+.bag-name{font-size:.84rem;font-weight:600;margin-bottom:2px;}
+.bag-detail{font-size:.74rem;color:var(--muted);line-height:1.4;}
+
+/* COMPARISON */
+.comparison-section{margin-bottom:36px;}
+.comparison-section h3{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:18px;text-align:center;}
+.comparison-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+@media(max-width:700px){.comparison-grid{grid-template-columns:1fr;}}
+.comp-card{border-radius:16px;overflow:hidden;border:1px solid var(--border);background:var(--surface);animation:cardIn .5s ease forwards;opacity:0;transform:translateY(14px);}
+.comp-card:nth-child(1){animation-delay:.2s}.comp-card:nth-child(2){animation-delay:.35s}.comp-card:nth-child(3){animation-delay:.5s}
+.comp-label{padding:10px 14px;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:7px;}
+.label-original{background:rgba(112,112,160,.15);color:var(--muted);}
+.label-risk{background:rgba(255,77,46,.12);color:var(--accent);}
+.label-safe{background:rgba(34,197,94,.12);color:var(--safe);}
+.comp-img-wrap{position:relative;aspect-ratio:4/3;overflow:hidden;}
+.comp-img-wrap img{width:100%;height:100%;object-fit:cover;}
+.risk-overlay{position:absolute;inset:0;background:rgba(255,77,46,.18);}
+.safe-overlay{position:absolute;inset:0;background:rgba(34,197,94,.1);}
+.risk-marker{position:absolute;background:var(--accent);color:white;font-size:.66rem;font-weight:700;padding:3px 6px;border-radius:6px;white-space:nowrap;animation:markerBounce 2s ease-in-out infinite;}
+@keyframes markerBounce{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.safe-marker{position:absolute;background:var(--safe);color:white;font-size:.66rem;font-weight:700;padding:3px 6px;border-radius:6px;white-space:nowrap;}
+.comp-desc{padding:12px 14px;font-size:.8rem;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);}
+
+/* CHECKLIST */
+.checklist-section{background:var(--surface);border-radius:20px;border:1px solid var(--border);padding:26px;margin-bottom:32px;}
+.checklist-section h3{font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:9px;}
+.checklist{display:flex;flex-direction:column;gap:9px;}
+.check-item{display:flex;align-items:center;gap:11px;padding:12px 14px;background:var(--surface2);border-radius:12px;border:1px solid var(--border);cursor:pointer;transition:all .25s;}
+.check-item:hover{border-color:var(--safe);}
+.check-item.checked{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.07);text-decoration:line-through;color:var(--muted);}
+.check-box{width:20px;height:20px;border-radius:6px;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .25s;}
+.check-item.checked .check-box{background:var(--safe);border-color:var(--safe);}
+.check-box::after{content:'✓';color:white;font-size:.75rem;font-weight:700;opacity:0;transition:opacity .2s;}
+.check-item.checked .check-box::after{opacity:1;}
+.check-text{font-size:.86rem;flex:1;}
+.check-priority{font-size:.68rem;font-weight:600;padding:2px 8px;border-radius:8px;flex-shrink:0;}
+.pri-high{background:rgba(255,77,46,.15);color:var(--accent);}
+.pri-med{background:rgba(251,191,36,.15);color:var(--warning);}
+
+.ai-disclaimer{background:rgba(112,112,160,.08);border:1px solid rgba(112,112,160,.2);border-radius:14px;padding:16px 18px;margin-bottom:32px;display:flex;gap:12px;align-items:flex-start;}
+.disclaimer-icon{font-size:1.3rem;flex-shrink:0;margin-top:1px;}
+.disclaimer-text{font-size:.78rem;color:var(--muted);line-height:1.7;}
+.disclaimer-text strong{color:var(--text);}
+
+.results-cta{display:flex;gap:11px;justify-content:center;flex-wrap:wrap;}
+.btn-secondary{padding:12px 24px;border-radius:12px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:.86rem;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .25s;}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+.btn-primary{padding:12px 24px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:white;font-size:.86rem;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif;transition:all .3s;box-shadow:0 6px 22px rgba(255,77,46,.3);}
+.btn-primary:hover{transform:translateY(-2px);}
+
+/* ── CHAT ── */
+.chat-fab{position:fixed;bottom:28px;right:28px;z-index:400;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;cursor:pointer;display:none;align-items:center;justify-content:center;font-size:1.5rem;box-shadow:0 8px 28px rgba(255,77,46,.45);transition:all .3s;animation:fabIn .4s ease;}
+.chat-fab:hover{transform:scale(1.08);}
+@keyframes fabIn{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+.chat-fab.show{display:flex;}
+.chat-panel{position:fixed;bottom:0;right:0;width:380px;max-width:100vw;height:520px;background:var(--surface);border:1px solid var(--border);border-radius:20px 20px 0 0;z-index:401;display:none;flex-direction:column;box-shadow:0 -8px 40px rgba(0,0,0,.4);transition:transform .35s cubic-bezier(.4,0,.2,1);}
+@media(max-width:440px){.chat-panel{width:100%;border-radius:20px 20px 0 0;}}
+.chat-panel.open{display:flex;}
+.chat-header{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.chat-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;}
+.chat-header-info h4{font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;}
+.chat-header-info p{font-size:.74rem;color:var(--safe);}
+.chat-close{margin-left:auto;cursor:pointer;color:var(--muted);font-size:1.2rem;padding:4px;}
+.chat-close:hover{color:var(--text);}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
+.chat-msg{display:flex;gap:10px;align-items:flex-start;animation:msgIn .3s ease;}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.chat-msg.user{flex-direction:row-reverse;}
+.chat-bubble{max-width:78%;padding:10px 14px;border-radius:16px;font-size:.84rem;line-height:1.6;}
+.chat-msg.bot .chat-bubble{background:var(--surface2);border:1px solid var(--border);border-bottom-left-radius:4px;}
+.chat-msg.user .chat-bubble{background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;border-bottom-right-radius:4px;}
+.chat-msg-avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:.75rem;flex-shrink:0;}
+.chat-msg.user .chat-msg-avatar{background:var(--surface2);border:1px solid var(--border);}
+.chat-typing{display:flex;align-items:center;gap:4px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:16px;border-bottom-left-radius:4px;width:fit-content;}
+.typing-dot{width:7px;height:7px;background:var(--muted);border-radius:50%;animation:typingDot 1.2s infinite;}
+.typing-dot:nth-child(2){animation-delay:.2s;}
+.typing-dot:nth-child(3){animation-delay:.4s;}
+@keyframes typingDot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+.chat-input-wrap{padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:9px;flex-shrink:0;}
+.chat-input{flex:1;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:.86rem;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;resize:none;height:42px;}
+.chat-input:focus{border-color:var(--accent);}
+.chat-send-btn{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;transition:all .2s;}
+.chat-send-btn:hover{transform:scale(1.08);}
+.chat-suggestions{display:flex;gap:7px;flex-wrap:wrap;padding:0 14px 10px;}
+.chat-sug{padding:5px 11px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:.76rem;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.chat-sug:hover{border-color:var(--accent);color:var(--accent);}
+
+/* TOAST */
+.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface2);color:var(--text);border:1px solid var(--border);padding:11px 22px;border-radius:12px;font-size:.86rem;font-weight:500;z-index:600;transition:transform .4s cubic-bezier(.4,0,.2,1);white-space:nowrap;box-shadow:0 8px 28px rgba(0,0,0,.4);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo"><div class="logo-dot"></div>QuakeReady</div>
+  <div class="nav-right">
+    <div class="nav-plan-badge" id="plan-badge">✨ Pro</div>
+    <div class="nav-badge" id="lang-badge" onclick="toggleLang()">TR</div>
+    <div class="nav-icon-btn" onclick="openDrawer('help')">❓</div>
+    <div class="nav-icon-btn" onclick="openDrawer('settings')">⚙️</div>
+  </div>
+</nav>
+
+<!-- DRAWER -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+<div class="settings-drawer" id="settings-drawer">
+  <div class="drawer-header"><h2 id="drawer-title">⚙️ Ayarlar</h2><div class="drawer-close" onclick="closeDrawer()">✕</div></div>
+  <div id="panel-settings">
+    <div class="drawer-section">
+      <div class="drawer-section-title">Dil / Language</div>
+      <div class="lang-toggle">
+        <button class="lang-btn active" id="btn-tr" onclick="setLang('tr')">🇹🇷 Türkçe</button>
+        <button class="lang-btn" id="btn-en" onclick="setLang('en')">🇬🇧 English</button>
+      </div>
+    </div>
+    <div class="drawer-section">
+      <div class="drawer-section-title" id="lbl-notif">Bildirimler</div>
+      <div class="setting-row"><div><div class="setting-label" id="lbl-n1">Analiz tamamlandığında bildir</div><div class="setting-sub" id="lbl-n1s">Tarayıcı bildirimi</div></div><div class="toggle-switch on" onclick="this.classList.toggle('on')"></div></div>
+      <div class="setting-row"><div><div class="setting-label" id="lbl-n2">Deprem haberleri</div><div class="setting-sub" id="lbl-n2s">Kandilli verilerine göre</div></div><div class="toggle-switch" onclick="this.classList.toggle('on')"></div></div>
+    </div>
+    <div class="drawer-section">
+      <div class="drawer-section-title" id="lbl-priv-set">Gizlilik</div>
+      <div class="setting-row"><div><div class="setting-label" id="lbl-p1">Fotoğrafları sunucuya gönderme</div><div class="setting-sub" id="lbl-p1s">Sadece cihazında işlenir</div></div><div class="toggle-switch on" onclick="this.classList.toggle('on')"></div></div>
+    </div>
+    <div class="drawer-section">
+      <div class="drawer-section-title" id="lbl-account-section">Hesabım</div>
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:12px">
+        <div id="acct-avatar" style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;color:white;flex-shrink:0">?</div>
+        <div><div id="acct-name" style="font-weight:600;font-size:.9rem">Misafir</div><div id="acct-email" style="font-size:.76rem;color:var(--muted)">Giriş yapılmadı</div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="openHistoryScreen()" style="width:100%;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:11px;color:var(--text);font-size:.86rem;font-family:'DM Sans',sans-serif;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">📊 <span id="lbl-history-btn">Analiz Geçmişi</span></button>
+        <button onclick="showUpgradePlan()" style="width:100%;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:11px;color:var(--text);font-size:.86rem;font-family:'DM Sans',sans-serif;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">💎 <span id="lbl-my-plan">Planım: Ücretsiz</span></button>
+        <button onclick="logoutUser()" style="width:100%;padding:10px 14px;background:var(--surface2);border:1.5px solid var(--border);border-radius:11px;color:var(--warning);font-size:.86rem;font-family:'DM Sans',sans-serif;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--warning)'" onmouseout="this.style.borderColor='var(--border)'">🚪 <span id="lbl-logout">Çıkış Yap</span></button>
+        <button onclick="deleteAccount()" style="width:100%;padding:10px 14px;background:rgba(255,77,46,.06);border:1.5px solid rgba(255,77,46,.25);border-radius:11px;color:var(--accent);font-size:.86rem;font-family:'DM Sans',sans-serif;cursor:pointer;text-align:left;display:flex;align-items:center;gap:10px;transition:all .2s">🗑 <span id="lbl-delete">Hesabı Sil</span></button>
+      </div>
+    </div>
+    <div class="drawer-section">
+      <div class="drawer-section-title" id="lbl-about">Hakkında</div>
+      <div class="version-info"><p id="lbl-ver">Sürüm: 1.0.0 (Demo)</p><p id="lbl-desc">Yapay zeka destekli deprem güvenlik analizi.</p><p style="margin-top:6px" id="lbl-mail">Sorunlar için → <a href="/cdn-cgi/l/email-protection#166763777d73647377726f5672737b793875797b"><span class="__cf_email__" data-cfemail="a7d6d2c6ccc2d5c2c6c3dee7c3c2cac889c4c8ca">[email&#160;protected]</span></a></p></div>
+    </div>
+  </div>
+  <div id="panel-help" style="display:none">
+    <div class="drawer-section">
+      <div class="drawer-section-title" id="lbl-faq">Sıkça Sorulan Sorular</div>
+      <div class="faq-item"><div class="faq-q" id="faq1q">Hangi oda tiplerini analiz edebilir?</div><div class="faq-a" id="faq1a">Salon, yatak odası, mutfak ve çocuk odası.</div></div>
+      <div class="faq-item"><div class="faq-q" id="faq2q">Fotoğraflarım güvende mi?</div><div class="faq-a" id="faq2a">Fotoğraflar yalnızca analiz için kullanılır, kaydedilmez.</div></div>
+      <div class="faq-item"><div class="faq-q" id="faq3q">Sonuçlar ne kadar doğru?</div><div class="faq-a" id="faq3a">AI genel deprem güvenliği prensiplerine dayanır. Profesyonel danışmanlığın yerini tutmaz.</div></div>
+    </div>
+    <div class="drawer-section">
+      <div class="drawer-section-title" id="lbl-contact">Bize Ulaş</div>
+      <div class="help-form" id="help-form">
+        <input class="help-input" id="help-email" type="email" placeholder="E-posta adresin">
+        <input class="help-input" id="help-subject" type="text" placeholder="Konu">
+        <textarea class="help-textarea" id="help-msg" placeholder="Mesajın..."></textarea>
+        <button class="help-submit" onclick="sendHelp()" id="btn-send">📨 Gönder</button>
+      </div>
+      <div class="help-sent" id="help-sent">✅ <span id="lbl-sent">Mesajın alındı!</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ACCOUNT PICKER MODAL -->
+<div class="modal-overlay" id="modal-account-google">
+  <div class="modal-box account-picker">
+    <div class="modal-header"><h3 id="ap-title-google">🔵 Google Hesabı Seç</h3><div class="modal-close" onclick="closeModal('modal-account-google')">✕</div></div>
+    <div class="account-list">
+      <div class="account-item" onclick="loginWithAccount('Ahmet Yılmaz','ahmet.yilmaz@gmail.com','AY')">
+        <div class="account-avatar-text" style="background:linear-gradient(135deg,#4285F4,#34A853)">AY</div>
+        <div class="account-info"><h4>Ahmet Yılmaz</h4><p><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4f2e27222a3b61362623222e350f28222e2623612c2022">[email&#160;protected]</a></p></div>
+        <div class="account-check">→</div>
+      </div>
+      <div class="account-item" onclick="loginWithAccount('Zeynep Kaya','zeynep.kaya@gmail.com','ZK')">
+        <div class="account-avatar-text" style="background:linear-gradient(135deg,#EA4335,#FBBC05)">ZK</div>
+        <div class="account-info"><h4>Zeynep Kaya</h4><p><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="dda7b8a4b3b8adf3b6bca4bc9dbab0bcb4b1f3beb2b0">[email&#160;protected]</a></p></div>
+        <div class="account-check">→</div>
+      </div>
+      <div class="account-add">
+        <span style="font-size:1.3rem">➕</span>
+        <span id="ap-add-google">Başka hesap ekle</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-account-apple">
+  <div class="modal-box account-picker">
+    <div class="modal-header"><h3 id="ap-title-apple">🍎 Apple Hesabı Seç</h3><div class="modal-close" onclick="closeModal('modal-account-apple')">✕</div></div>
+    <div class="account-list">
+      <div class="account-item" onclick="loginWithAccount('Mert Demir','mert.demir@icloud.com','MD')">
+        <div class="account-avatar-text" style="background:linear-gradient(135deg,#1c1c1e,#3a3a3c)">MD</div>
+        <div class="account-info"><h4>Mert Demir</h4><p><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="016c6473752f65646c68734168626d6e74652f626e6c">[email&#160;protected]</a></p></div>
+        <div class="account-check">→</div>
+      </div>
+      <div class="account-add">
+        <span style="font-size:1.3rem">➕</span>
+        <span id="ap-add-apple">Başka hesap ekle</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAYMENT MODAL -->
+<div class="modal-overlay" id="modal-payment">
+  <div class="modal-box payment-modal-box">
+    <div class="payment-plan-header">
+      <div class="payment-plan-name" id="pay-plan-name">🔥 Pro</div>
+      <div class="payment-plan-price" id="pay-plan-price"><strong>$4.99</strong>/ay · 5 oda analizi</div>
+    </div>
+    <div class="payment-form">
+      <div>
+        <div class="pay-label" id="pay-lbl-card">Kart Numarası</div>
+        <input class="pay-input" id="pay-card" placeholder="1234 5678 9012 3456" maxlength="19" oninput="formatCard(this)">
+      </div>
+      <div class="pay-row">
+        <div>
+          <div class="pay-label" id="pay-lbl-exp">Son Kullanma</div>
+          <input class="pay-input" id="pay-exp" placeholder="AA/YY" maxlength="5" oninput="formatExp(this)">
+        </div>
+        <div>
+          <div class="pay-label">CVV</div>
+          <input class="pay-input" id="pay-cvv" placeholder="123" maxlength="3">
+        </div>
+      </div>
+      <div>
+        <div class="pay-label" id="pay-lbl-name">Kart Üzerindeki Ad</div>
+        <input class="pay-input" id="pay-name" placeholder="Ad Soyad">
+      </div>
+      <button class="pay-btn" onclick="completePayment()" id="pay-btn">💳 Ödemeyi Tamamla</button>
+      <div class="pay-secure">🔒 <span id="pay-secure-txt">256-bit SSL ile güvende</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- TERMS / PRIVACY MODALS -->
+<div class="modal-overlay" id="modal-terms">
+  <div class="modal-box">
+    <div class="modal-header"><h3 id="modal-terms-title">📋 Kullanım Koşulları</h3><div class="modal-close" onclick="closeModal('modal-terms')">✕</div></div>
+    <div class="modal-body">
+      <p class="modal-date" id="terms-date">Son güncelleme: 28 Mart 2026</p>
+      <h4>1. Hizmetin Kapsamı</h4><p>QuakeReady, kullanıcıların oda fotoğraflarını yapay zeka ile analiz ederek deprem güvenliği önerileri sunan bir bilgilendirme platformudur.</p>
+      <h4>2. Sorumluluk Sınırlaması</h4><p>Sunulan analizler yalnızca bilgilendirme amaçlıdır. %100 doğruluk garantisi verilmez. Kritik kararlar için uzman görüşü alınız.</p>
+      <h4>3. Kullanıcı Yükümlülükleri</h4><p>Uygulama yalnızca kişisel ve yasal amaçlarla kullanılabilir. Başkalarına ait mekânların izinsiz analizi yasaktır.</p>
+      <h4>4. Fikri Mülkiyet</h4><p>Arayüz ve içerikler QuakeReady'ye aittir. Kullanıcı fotoğrafları analiz sonrası silinir.</p>
+      <h4>5. Plan ve Ödeme</h4><p>Ücretli planlar aylık faturalandırılır. Ödeme Stripe altyapısı üzerinden gerçekleştirilir.</p>
+      <h4>6. Uygulanacak Hukuk</h4><p>Türkiye Cumhuriyeti kanunlarına tabidir. Uyuşmazlıklarda İstanbul mahkemeleri yetkilidir.</p>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="modal-privacy">
+  <div class="modal-box">
+    <div class="modal-header"><h3 id="modal-privacy-title">🔒 Gizlilik Politikası</h3><div class="modal-close" onclick="closeModal('modal-privacy')">✕</div></div>
+    <div class="modal-body">
+      <p class="modal-date" id="privacy-date">Son güncelleme: 28 Mart 2026</p>
+      <h4>1. Toplanan Veriler</h4><p>Kayıt sırasında e-posta adresiniz alınır. Fotoğraflar analiz sonrasında kalıcı olarak silinir. Kullanım istatistikleri anonim tutulur.</p>
+      <h4>2. Kullanım Amacı</h4><p>Veriler yalnızca hizmet sağlama, plan yönetimi ve teknik destek için kullanılır. Üçüncü taraflara satılmaz.</p>
+      <h4>3. Fotoğraf Gizliliği</h4><p>Yüklenen fotoğraflar şifreli bağlantıyla AI modeline iletilir ve analiz tamamlandığında sunuculardan silinir.</p>
+      <h4>4. Veri Güvenliği</h4><p>Tüm iletişim TLS 1.3 ile şifrelenir. Ödeme bilgileri Stripe PCI DSS altyapısında tutulur.</p>
+      <h4>5. Kullanıcı Hakları</h4><p>KVKK kapsamında verilerinize erişme, düzeltme ve silme hakkına sahipsiniz. Talepler: <a href="/cdn-cgi/l/email-protection#e090928996818399a09195818b859285818499ce819090" style="color:var(--accent)"><span class="__cf_email__" data-cfemail="58282a312e393b2118292d39333d2a3d393c2176392828">[email&#160;protected]</span></a></p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ══ SCREEN: HISTORY ══ -->
+<div id="screen-history" class="screen">
+  <div style="padding:88px 24px 60px;max-width:900px;margin:0 auto;width:100%">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:32px">
+      <button onclick="goBackFromHistory()" style="width:36px;height:36px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0">←</button>
+      <div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800" id="hist-title">Analiz Geçmişi</h2>
+        <p style="font-size:.84rem;color:var(--muted)" id="hist-sub">Daha önce analiz ettiğin odalar</p>
+      </div>
+    </div>
+    <div id="history-list" style="display:flex;flex-direction:column;gap:14px"></div>
+  </div>
+</div>
+
+
+<!-- CONFIRM MODAL -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal-box" style="max-width:360px">
+    <div class="modal-header">
+      <h3 id="confirm-title">Emin misiniz?</h3>
+      <div class="modal-close" onclick="closeModal('modal-confirm')">✕</div>
+    </div>
+    <div style="padding:20px 24px">
+      <p id="confirm-msg" style="font-size:.9rem;color:var(--muted);line-height:1.6;margin-bottom:20px"></p>
+      <div style="display:flex;gap:10px">
+        <button onclick="closeModal('modal-confirm')" style="flex:1;padding:12px;border-radius:11px;border:1.5px solid var(--border);background:transparent;color:var(--text);font-size:.9rem;cursor:pointer;font-family:'DM Sans',sans-serif" id="confirm-cancel-btn">İptal</button>
+        <button id="confirm-ok-btn" onclick="confirmAction()" style="flex:1;padding:12px;border-radius:11px;border:none;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-size:.9rem;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif">Evet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RENAME MODAL -->
+<div class="modal-overlay" id="modal-rename">
+  <div class="modal-box" style="max-width:380px">
+    <div class="modal-header">
+      <h3 id="rename-title">✏️ Adı Değiştir</h3>
+      <div class="modal-close" onclick="closeModal('modal-rename')">✕</div>
+    </div>
+    <div style="padding:20px 24px">
+      <input id="rename-input" class="auth-input" type="text" placeholder="Oda adı..." style="margin-bottom:16px">
+      <button onclick="applyRename()" style="width:100%;padding:12px;border-radius:11px;border:none;background:linear-gradient(135deg,var(--accent),var(--accent2));color:white;font-size:.9rem;font-weight:600;cursor:pointer;font-family:'Syne',sans-serif" id="rename-btn">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<button class="chat-fab" id="chat-fab" onclick="toggleChat()">💬</button>
+
+<!-- CHAT PANEL -->
+<div class="chat-panel" id="chat-panel">
+  <div class="chat-header">
+    <div class="chat-avatar">🤖</div>
+    <div class="chat-header-info">
+      <h4 id="chat-title">QuakeReady AI</h4>
+      <p id="chat-status">● Çevrimiçi</p>
+    </div>
+    <div class="chat-close" onclick="toggleChat()">✕</div>
+  </div>
+  <div class="chat-messages" id="chat-messages"></div>
+  <div class="chat-suggestions" id="chat-suggestions">
+    <div class="chat-sug" onclick="sendSuggestion(this)">Hangi dolap daha güvenli?</div>
+    <div class="chat-sug" onclick="sendSuggestion(this)">Depremde nerede saklanmalıyım?</div>
+    <div class="chat-sug" onclick="sendSuggestion(this)">TV sabitleme nasıl yapılır?</div>
+  </div>
+  <div class="chat-input-wrap">
+    <textarea class="chat-input" id="chat-input" placeholder="Deprem veya oda güvenliği hakkında sor..." rows="1" onkeydown="chatKeyDown(event)"></textarea>
+    <button class="chat-send-btn" onclick="sendChatMessage()">➤</button>
+  </div>
+</div>
+
+<!-- ══ SCREEN: AUTH ══ -->
+<div id="screen-auth" class="screen active">
+  <div class="auth-card">
+    <div class="auth-logo"><div class="auth-logo-dot"></div>QuakeReady</div>
+    <p class="auth-tagline" id="auth-tagline">Evini depreme hazırla. AI ile risk analizi yap.</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Giriş Yap</button>
+      <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Hesap Aç</button>
+    </div>
+    <button class="social-btn" onclick="openModal('modal-account-google')">
+      <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      <span id="btn-google">Google ile devam et</span>
+    </button>
+    <button class="social-btn" onclick="openModal('modal-account-apple')">
+      <span style="font-size:1.2rem">🍎</span>
+      <span id="btn-apple">Apple ile devam et</span>
+    </button>
+    <div class="divider" id="divider-or">veya e-posta ile</div>
+    <input class="auth-input" type="email" id="auth-email-input" placeholder="E-posta adresin" style="margin-bottom:10px">
+    <div class="pass-wrap">
+      <input class="auth-input" type="password" id="auth-pass-input" placeholder="Şifre" style="padding-right:42px;margin-bottom:0">
+      <span class="pass-eye" onclick="togglePass('auth-pass-input',this)" id="eye1">👁</span>
+    </div>
+    <div class="pass-wrap" id="pass2-wrap" style="display:none;margin-top:10px">
+      <input class="auth-input" type="password" id="auth-pass2-input" placeholder="Şifreyi tekrar gir" style="padding-right:42px;margin-bottom:0">
+      <span class="pass-eye" onclick="togglePass('auth-pass2-input',this)">👁</span>
+    </div>
+    <button class="auth-primary-btn" onclick="doAuth()" id="auth-btn" style="margin-top:14px">Giriş Yap</button>
+    <p class="auth-terms" id="auth-terms">
+      Devam ederek <a onclick="openModal('modal-terms')">Kullanım Koşulları</a>'nı ve <a onclick="openModal('modal-privacy')">Gizlilik Politikası</a>'nı kabul etmiş olursunuz.
+    </p>
+  </div>
+</div>
+
+<!-- ══ SCREEN: PRICING ══ -->
+<div id="screen-pricing" class="screen">
+  <div class="pricing-header">
+    <div class="hero-tag" style="margin-bottom:16px">🎉 <span id="welcome-tag">Hoş geldin!</span></div>
+    <h2 id="pricing-title">Planını Seç</h2>
+    <p id="pricing-sub">İlk oda analizi tamamen ücretsiz.</p>
+  </div>
+  <div class="pricing-grid">
+    <div class="plan-card" onclick="selectPlan('free')">
+      <div class="plan-icon">🆓</div>
+      <div class="plan-name" id="plan-free-name">Ücretsiz</div>
+      <div class="plan-price">$0<span id="plan-free-period">/ay</span></div>
+      <div class="plan-rooms" id="plan-free-rooms">1 oda analizi</div>
+      <ul class="plan-features">
+        <li id="pf1">Risk analizi</li>
+        <li id="pf2">Güvenli yerleşim görseli</li>
+        <li id="pf3">Saklanma alanı önerisi</li>
+        <li id="pf4">Deprem çantası listesi</li>
+        <li class="no" id="pf5">PDF raporu yok</li>
+      </ul>
+      <button class="plan-btn" id="btn-free">Ücretsiz Başla</button>
+    </div>
+    <div class="plan-card popular" onclick="openPayment('pro')">
+      <div class="popular-badge" id="popular-badge">⭐ EN POPÜLER</div>
+      <div class="plan-icon">🔥</div>
+      <div class="plan-name" id="plan-pro-name">Pro</div>
+      <div class="plan-price">$4.99<span id="plan-pro-period">/ay</span></div>
+      <div class="plan-rooms" id="plan-pro-rooms">5 oda analizi</div>
+      <ul class="plan-features">
+        <li id="pp1">Risk analizi</li>
+        <li id="pp2">Güvenli yerleşim görseli</li>
+        <li id="pp3">Saklanma alanı önerisi</li>
+        <li id="pp4">Deprem çantası listesi</li>
+        <li id="pp5">PDF raporu</li>
+      </ul>
+      <button class="plan-btn" id="btn-pro">Pro'ya Geç</button>
+    </div>
+    <div class="plan-card" onclick="openPayment('max')">
+      <div class="plan-icon">💎</div>
+      <div class="plan-name" id="plan-max-name">Max</div>
+      <div class="plan-price">$7.99<span id="plan-max-period">/ay</span></div>
+      <div class="plan-rooms" id="plan-max-rooms">10 oda analizi</div>
+      <ul class="plan-features">
+        <li id="pm1">Risk analizi</li>
+        <li id="pm2">Güvenli yerleşim görseli</li>
+        <li id="pm3">Saklanma alanı önerisi</li>
+        <li id="pm4">Deprem çantası listesi</li>
+        <li id="pm5">PDF raporu + Öncelikli destek</li>
+      </ul>
+      <button class="plan-btn" id="btn-max">Max'e Geç</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: UPLOAD ══ -->
+<div id="screen-upload" class="screen">
+  <div class="hero-tag">⚡ <span id="hero-tag-txt">Yapay Zeka Destekli Deprem Güvenliği</span></div>
+  <h1 id="hero-title">Odanın fotoğrafı,<br><span>depremdeki riski</span> gösterir.</h1>
+  <p class="hero-sub" id="hero-sub">Bir oda fotoğrafı yükle. AI tehlikeleri görselleştirsin ve güvenli yerleşim önersin.</p>
+  <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+    <input type="file" id="file-input" accept="image/*" onchange="handleFileSelect(event)">
+    <div class="upload-icon">📸</div>
+    <h3 id="upload-title">Oda fotoğrafını buraya sürükle</h3>
+    <p id="upload-sub">veya tıklayarak dosya seç · JPG, PNG · Maks 10MB</p>
+    <img id="preview-thumb" alt="">
+  </div>
+  <div class="room-select">
+    <button class="room-btn active" onclick="selectRoom(this)" id="r-salon">🛋️ Salon</button>
+    <button class="room-btn" onclick="selectRoom(this)" id="r-yatak">🛏️ Yatak Odası</button>
+    <button class="room-btn" onclick="selectRoom(this)" id="r-mutfak">🍳 Mutfak</button>
+    <button class="room-btn" onclick="selectRoom(this)" id="r-cocuk">🧸 Çocuk Odası</button>
+  </div>
+  <button class="analyze-btn" onclick="startAnalysis()" id="btn-analyze">🔍 Deprem Riskini Analiz Et</button>
+  <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;justify-content:center">
+    <div style="font-size:.78rem;color:var(--muted);align-self:center;margin-right:4px" id="quality-lbl">Görsel kalitesi:</div>
+    <button onclick="setQuality('schnell',this)" class="room-btn" id="q-schnell" style="font-size:.78rem;padding:6px 12px">🚀 Hızlı</button>
+    <button onclick="setQuality('dev',this)" class="room-btn active" id="q-dev" style="font-size:.78rem;padding:6px 12px">⭐ Standart</button>
+    <button onclick="setQuality('pro',this)" class="room-btn" id="q-pro" style="font-size:.78rem;padding:6px 12px">💎 Yüksek</button>
+  </div>
+  <div class="usage-bar-wrap">
+    <div class="usage-bar-label"><span id="usage-label">Kullanım: 0/1 oda</span><span style="color:var(--accent);cursor:pointer" onclick="showScreen('screen-pricing')" id="upgrade-link">Yükselt →</span></div>
+    <div class="usage-bar-track"><div class="usage-bar-fill" id="usage-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: LOADING ══ -->
+<div id="screen-loading" class="screen">
+  <div class="loading-orb"></div>
+  <div style="text-align:center">
+    <h2 style="font-family:'Syne',sans-serif;font-size:1.45rem;font-weight:700;margin-bottom:6px" id="loading-title">Oda analiz ediliyor...</h2>
+    <p style="color:var(--muted);font-size:.86rem" id="loading-sub">Bu işlem birkaç saniye sürebilir</p>
+  </div>
+  <div class="loading-steps">
+    <div class="loading-step" id="step-1"><span class="step-icon">🔍</span><span id="s1">Oda düzeni tespit ediliyor</span></div>
+    <div class="loading-step" id="step-2"><span class="step-icon">⚠️</span><span id="s2">Risk noktaları belirleniyor</span></div>
+    <div class="loading-step" id="step-3"><span class="step-icon">🎨</span><span id="s3">Deprem senaryosu üretiliyor</span></div>
+    <div class="loading-step" id="step-4"><span class="step-icon">✅</span><span id="s4">Güvenli yerleşim oluşturuluyor</span></div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: RESULTS ══ -->
+<div id="screen-results" class="screen">
+  <div class="results-header">
+    <div class="demo-banner">🧪 <span id="demo-txt"><strong>Demo Modu</strong> — Görseller örnek içeriklerdir. Gerçek uygulamada AI senin odanı analiz ederek üretir.</span></div>
+    <h2 id="res-title">Analizin Tamamlandı</h2>
+    <div class="risk-score-badge risk-high" id="res-badge">🔴 Yüksek Risk — 5 tehlike noktası</div>
+  </div>
+  <div class="stats-bar">
+    <div class="stat-chip"><strong>5</strong><span id="st1"> Risk noktası</span></div>
+    <div class="stat-chip"><strong>3</strong><span id="st2"> Kritik tehlike</span></div>
+    <div class="stat-chip"><strong>%78</strong><span id="st3"> Risk düşürme potansiyeli</span></div>
+  </div>
+
+  <div class="risks-grid">
+    <div class="risk-card"><div class="risk-icon-wrap">🗄️</div><div><h4 id="r1t">Sabitlenmemiş Dolap</h4><p id="r1d">Yüksek dolap devrilme riski.</p><span class="severity sev-high" id="r1s">Kritik</span></div></div>
+    <div class="risk-card"><div class="risk-icon-wrap">📺</div><div><h4 id="r2t">TV Düşme Riski</h4><p id="r2d">TV sabitlenmemiş.</p><span class="severity sev-high" id="r2s">Kritik</span></div></div>
+    <div class="risk-card"><div class="risk-icon-wrap">🖼️</div><div><h4 id="r3t">Yatak Üstü Tablo</h4><p id="r3d">Ağır çerçeve düşebilir.</p><span class="severity sev-high" id="r3s">Kritik</span></div></div>
+    <div class="risk-card"><div class="risk-icon-wrap">🚪</div><div><h4 id="r4t">Kaçış Yolu Dar</h4><p id="r4d">Kapı önü çıkışı engelleyebilir.</p><span class="severity sev-med" id="r4s">Orta</span></div></div>
+    <div class="risk-card"><div class="risk-icon-wrap">📚</div><div><h4 id="r5t">Üst Raf Ağır Objeler</h4><p id="r5d">Objeler savrulabilir.</p><span class="severity sev-med" id="r5s">Orta</span></div></div>
+  </div>
+
+  <!-- SAFEST SPOT -->
+  <div class="safest-spot-section">
+    <h3>🛡️ <span id="spot-title">En Güvenli Saklanma Alanı</span></h3>
+    <p class="spot-sub" id="spot-sub">Bu odaya özel AI analizi — sarsıntı başladığında nereye geçmelisin?</p>
+    <div class="spot-grid">
+      <div class="spot-card best"><div class="spot-emoji">🏆</div><div><div class="best-badge" id="best-badge">EN İYİ SEÇENEK</div><h4 id="spot1t">Sağlam İç Duvarın Yanı</h4><p id="spot1d">Kuzey duvarı, pencereden uzak. Çök-Kapan-Tutun pozisyonunda bekle.</p></div></div>
+      <div class="spot-card"><div class="spot-emoji">🛋️</div><div><h4 id="spot2t">Kanepenin Yanı</h4><p id="spot2d">Yanına çök, ÜSTÜNE değil.</p></div></div>
+      <div class="spot-card"><div class="spot-emoji">🚶</div><div><h4 id="spot3t">İç Koridor</h4><p id="spot3d">Sarsıntı devam ediyorsa koridora geç.</p></div></div>
+    </div>
+    <div class="spot-dont">
+      <div class="spot-dont-title" id="dont-title">⚠️ Kesinlikle Gitme</div>
+      <ul>
+        <li id="dont1">Pencere önü — cam kırılabilir</li>
+        <li id="dont2">Büyük dolap yanı — devrilebilir</li>
+        <li id="dont3">Kapı çerçevesi — güvenli değil</li>
+        <li id="dont4">Dış duvarlar — daha fazla hareket eder</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- POSITION GUIDE — REAL IMAGE -->
+  <div class="position-section">
+    <h3>🧎 <span id="pos-title">Deprem Anında Doğru Pozisyon</span></h3>
+    <p class="position-sub" id="pos-sub">Sarsıntı başladığında bu 3 adımı uygula: Çök — Kapan — Tutun</p>
+    <div style="border-radius:14px;overflow:hidden;margin-bottom:20px;border:1px solid var(--border)">
+      <img src="data:image/jpeg;base64,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" alt="Çök Kapan Tutun" style="width:100%;display:block;border-radius:14px">
+    </div>
+    <div class="position-grid">
+      <div class="pos-card">
+        <div class="pos-label">
+          <div class="pos-step-badge" id="pos-step1">1. ADIM</div>
+          <div class="pos-name" id="pos-name1">ÇÖK</div>
+          <div class="pos-desc" id="pos-desc1">Sarsıntı başlar başlamaz hemen yere çök. Diz ve ellerinin üzerine in. Ayakta durma.</div>
+          <div class="pos-tip" id="pos-tip1">💡 Ellerini ve dizlerini yere daya, sağlam bir pozisyon al.</div>
+        </div>
+      </div>
+      <div class="pos-card">
+        <div class="pos-label">
+          <div class="pos-step-badge" id="pos-step2">2. ADIM</div>
+          <div class="pos-name" id="pos-name2">KAPAN</div>
+          <div class="pos-desc" id="pos-desc2">Sağlam bir masanın altına gir. Masa yoksa kollarınla kafanı ve enseni koru.</div>
+          <div class="pos-tip" id="pos-tip2">💡 Kollarını kafanın iki yanına al, başını iki kolun arasına göm.</div>
+        </div>
+      </div>
+      <div class="pos-card">
+        <div class="pos-label">
+          <div class="pos-step-badge" id="pos-step3">3. ADIM</div>
+          <div class="pos-name" id="pos-name3">TUTUN</div>
+          <div class="pos-desc" id="pos-desc3">Masa ayağını sıkıca tut. Sarsıntı tamamen bitene kadar yerinden kımıldama.</div>
+          <div class="pos-tip" id="pos-tip3">💡 Sarsıntı genellikle 20-60 saniye sürer. Tamamen bitene kadar bırakma.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BAG -->
+  <div class="bag-section">
+    <h3>🎒 <span id="bag-title">Deprem Çantanda Neler Olmalı?</span></h3>
+    <p class="bag-sub" id="bag-sub">AFAD ve Kızılay önerilerine göre kapsamlı liste</p>
+    <div class="bag-grid">
+      <div class="bag-item"><div class="bag-emoji">💧</div><div><div class="bag-name" id="bag1n">Su</div><div class="bag-detail" id="bag1d">Kişi başı 3 günlük (~9 litre)</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">🥫</div><div><div class="bag-name" id="bag2n">Hazır Gıda</div><div class="bag-detail" id="bag2d">Konserve, enerji barı, kuru meyve</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">🔦</div><div><div class="bag-name" id="bag3n">El Feneri</div><div class="bag-detail" id="bag3d">Yedek pille birlikte</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">🩹</div><div><div class="bag-name" id="bag4n">İlk Yardım Kiti</div><div class="bag-detail" id="bag4d">Bandaj, antiseptik, ağrı kesici</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">📻</div><div><div class="bag-name" id="bag5n">Radyo</div><div class="bag-detail" id="bag5d">Pilli veya el çevirmeli</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">🔋</div><div><div class="bag-name" id="bag6n">Taşınabilir Şarj</div><div class="bag-detail" id="bag6d">Tam şarjlı tutulmalı</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">💊</div><div><div class="bag-name" id="bag7n">İlaçlar</div><div class="bag-detail" id="bag7d">Düzenli ilaçlar (1 haftalık)</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">📄</div><div><div class="bag-name" id="bag8n">Önemli Belgeler</div><div class="bag-detail" id="bag8d">Kimlik fotokopisi, sigorta</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">💵</div><div><div class="bag-name" id="bag9n">Nakit Para</div><div class="bag-detail" id="bag9d">ATM'ler çalışmayabilir</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">🧥</div><div><div class="bag-name" id="bag10n">Yedek Kıyafet</div><div class="bag-detail" id="bag10d">Sıcak tutan bir set</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">🔑</div><div><div class="bag-name" id="bag11n">Düdük</div><div class="bag-detail" id="bag11d">Enkaz altında yardım çağırmak için</div></div></div>
+      <div class="bag-item"><div class="bag-emoji">🧤</div><div><div class="bag-name" id="bag12n">Eldiven & N95 Maske</div><div class="bag-detail" id="bag12d">Enkaz ve toz için koruma</div></div></div>
+    </div>
+  </div>
+
+  <!-- COMPARISON -->
+  <div class="comparison-section">
+    <h3 id="comp-title">Görsel Karşılaştırma</h3>
+    <div class="comparison-grid">
+      <div class="comp-card">
+        <div class="comp-label label-original">📷 <span id="lbl-orig">Mevcut Halın</span></div>
+        <div class="comp-img-wrap"><img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80" alt="Salon"></div>
+        <div class="comp-desc" id="desc-orig">Mevcut oda düzenin. AI bu fotoğrafı analiz ederek riskleri tespit etti.</div>
+      </div>
+      <div class="comp-card">
+        <div class="comp-label label-risk">⚠️ <span id="lbl-risk">Deprem Anı Senaryosu</span></div>
+        <div class="comp-img-wrap">
+          <img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80" alt="Risk" style="filter:saturate(.65) brightness(.72) contrast(1.12)">
+          <div class="risk-overlay"></div>
+          <div class="risk-marker" style="top:16%;left:9%">💥 <span id="m1">Dolap devrildi</span></div>
+          <div class="risk-marker" style="top:54%;right:11%">📺 <span id="m2">TV fırladı</span></div>
+          <div class="risk-marker" style="bottom:19%;left:28%">🚫 <span id="m3">Çıkış kapandı</span></div>
+        </div>
+        <div class="comp-desc" id="desc-risk">AI'ın ürettiği deprem senaryosu.</div>
+      </div>
+      <div class="comp-card">
+        <div class="comp-label label-safe">✅ <span id="lbl-safe">Güvenli Yerleşim</span></div>
+        <div class="comp-img-wrap">
+          <img src="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80" alt="Güvenli" style="filter:saturate(1.08) brightness(.95) hue-rotate(8deg)">
+          <div class="safe-overlay"></div>
+          <div class="safe-marker" style="top:19%;left:7%">⚓ <span id="sm1">Sabitlendi</span></div>
+          <div class="safe-marker" style="top:51%;right:9%">🔒 <span id="sm2">Güvende</span></div>
+          <div class="safe-marker" style="bottom:17%;left:27%">✅ <span id="sm3">Kaçış açık</span></div>
+        </div>
+        <div class="comp-desc" id="desc-safe">Önerilen güvenli düzenleme.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHECKLIST -->
+  <div class="checklist-section">
+    <h3>🎯 <span id="check-title">Yapman Gerekenler</span></h3>
+    <div class="checklist">
+      <div class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><span class="check-text" id="c1">Dolabı duvara L-braketi ile sabitle</span><span class="check-priority pri-high" id="c1p">Kritik</span></div>
+      <div class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><span class="check-text" id="c2">TV'yi güvenlik bandıyla sabitle</span><span class="check-priority pri-high" id="c2p">Kritik</span></div>
+      <div class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><span class="check-text" id="c3">Yatak üstündeki tabloyu taşı</span><span class="check-priority pri-high" id="c3p">Kritik</span></div>
+      <div class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><span class="check-text" id="c4">Kapı önündeki eşyaları çek</span><span class="check-priority pri-med" id="c4p">Orta</span></div>
+      <div class="check-item" onclick="toggleCheck(this)"><div class="check-box"></div><span class="check-text" id="c5">Üst raflardaki ağır kitapları taşı</span><span class="check-priority pri-med" id="c5p">Orta</span></div>
+    </div>
+  </div>
+
+  <div class="ai-disclaimer">
+    <div class="disclaimer-icon">🤖</div>
+    <div class="disclaimer-text" id="disclaimer-text"><strong>Yapay Zeka Uyarısı:</strong> Risk analizleri genel güvenlik ilkelerine dayanmakta olup <strong>%100 doğruluk garantisi verilmez.</strong> Sonuçlar yalnızca bilgilendirme amaçlıdır; profesyonel mühendislik danışmanlığının yerini tutmaz.</div>
+  </div>
+
+  <div class="results-cta">
+    <button class="btn-secondary" onclick="goBack()">← <span id="btn-back">Yeni Oda Analiz Et</span></button>
+    <button class="btn-primary">📄 <span id="btn-pdf">PDF Raporu İndir</span></button>
+  </div>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// ── API KEYS ──
+const FAL_KEY = '44b2f216-8945-4023-8584-e8f1df87fd5a:5ca9ecab44dad30d5446d6d7697fdb98';
+const GEMINI_KEY = 'AIzaSyCQ_KsBoAsCFMSJ9hQCktr-TrDdVsMtXUo';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+
+// ── STATE ──
+let currentLang = 'tr';
+let selectedQuality = 'dev'; // schnell | dev | pro
+let userPlan = 'free';
+let roomsUsed = 0;
+let roomLimit = 1;
+let authTabState = 'login';
+let pendingPlan = null;
+let chatHistory = [];
+let chatOpen = false;
+let loggedInUser = null;
+
+// ── PASSWORD EYE ──
+function togglePass(inputId, eyeEl) {
+  const inp = document.getElementById(inputId);
+  if (inp.type === 'password') { inp.type = 'text'; eyeEl.textContent = '🙈'; }
+  else { inp.type = 'password'; eyeEl.textContent = '👁'; }
+}
+
+// ── AUTH ──
+function switchAuthTab(tab) {
+  authTabState = tab;
+  document.getElementById('tab-login').classList.toggle('active', tab==='login');
+  document.getElementById('tab-register').classList.toggle('active', tab==='register');
+  document.getElementById('pass2-wrap').style.display = tab==='register' ? 'block' : 'none';
+  document.getElementById('auth-btn').textContent = tab==='login'
+    ? (currentLang==='tr'?'Giriş Yap':'Sign In')
+    : (currentLang==='tr'?'Hesap Oluştur':'Create Account');
+}
+
+function loginWithAccount(name, email, initials) {
+  loggedInUser = {name, email, initials};
+  closeModal('modal-account-google');
+  closeModal('modal-account-apple');
+  updateAccountUI();
+  showToast('✅ ' + name + (currentLang==='tr'?' olarak giriş yapıldı':', signed in'));
+  setTimeout(()=>showScreen('screen-pricing'), 700);
+}
+
+function doAuth() {
+  const e = document.getElementById('auth-email-input').value;
+  if (!e) { showToast(currentLang==='tr'?'⚠️ E-posta girin':'⚠️ Enter email'); return; }
+  loggedInUser = {name: e.split('@')[0], email: e, initials: e[0].toUpperCase()};
+  updateAccountUI();
+  showToast(currentLang==='tr'?'✅ Giriş başarılı!':'✅ Signed in!');
+  setTimeout(()=>showScreen('screen-pricing'), 700);
+}
+
+// ── PRICING ──
+function selectPlan(plan) {
+  userPlan = plan;
+  roomLimit = plan==='free'?1:plan==='pro'?5:10;
+  if (plan!=='free') {
+    document.getElementById('plan-badge').textContent = plan==='pro'?'✨ Pro':'💎 Max';
+    document.getElementById('plan-badge').style.display = 'flex';
+  }
+  const names = {free:currentLang==='tr'?'Ücretsiz':'Free',pro:'Pro',max:'Max'};
+  showToast('🆓 ' + names[plan] + (currentLang==='tr'?' seçildi!':', selected!'));
+  setTimeout(()=>{ updateUsageBar(); showScreen('screen-upload'); }, 700);
+}
+
+function openPayment(plan) {
+  pendingPlan = plan;
+  const isPro = plan==='pro';
+  document.getElementById('pay-plan-name').textContent = isPro ? '🔥 Pro' : '💎 Max';
+  document.getElementById('pay-plan-price').innerHTML = isPro
+    ? '<strong>$4.99</strong>/ay · 5 ' + (currentLang==='tr'?'oda analizi':'room analyses')
+    : '<strong>$7.99</strong>/ay · 10 ' + (currentLang==='tr'?'oda analizi':'room analyses');
+  document.getElementById('pay-card').value = '';
+  document.getElementById('pay-exp').value = '';
+  document.getElementById('pay-cvv').value = '';
+  document.getElementById('pay-name').value = '';
+  openModal('modal-payment');
+}
+
+function formatCard(el) {
+  let v = el.value.replace(/\D/g,'').substring(0,16);
+  el.value = v.replace(/(.{4})/g,'$1 ').trim();
+}
+function formatExp(el) {
+  let v = el.value.replace(/\D/g,'').substring(0,4);
+  if (v.length>=2) v = v.substring(0,2)+'/'+v.substring(2);
+  el.value = v;
+}
+
+function completePayment() {
+  const card = document.getElementById('pay-card').value.replace(/\s/g,'');
+  const exp = document.getElementById('pay-exp').value;
+  const cvv = document.getElementById('pay-cvv').value;
+  const name = document.getElementById('pay-name').value;
+  if (card.length < 16 || exp.length < 5 || cvv.length < 3 || !name) {
+    showToast(currentLang==='tr'?'⚠️ Tüm kart bilgilerini doldurun':'⚠️ Fill all card fields');
+    return;
+  }
+  const btn = document.getElementById('pay-btn');
+  btn.textContent = currentLang==='tr'?'⏳ İşleniyor...':'⏳ Processing...';
+  btn.disabled = true;
+  setTimeout(()=>{
+    closeModal('modal-payment');
+    btn.textContent = currentLang==='tr'?'💳 Ödemeyi Tamamla':'💳 Complete Payment';
+    btn.disabled = false;
+    selectPlan(pendingPlan);
+    showToast((pendingPlan==='pro'?'🔥 Pro':'💎 Max') + (currentLang==='tr'?' satın alındı! Hoş geldin.':' purchased! Welcome.'));
+  }, 1800);
+}
+
+// ── UPLOAD ──
+function updateUsageBar() {
+  const pct = (roomsUsed/roomLimit)*100;
+  document.getElementById('usage-fill').style.width = pct+'%';
+  document.getElementById('usage-label').textContent = currentLang==='tr'
+    ? `Kullanım: ${roomsUsed}/${roomLimit} oda`
+    : `Usage: ${roomsUsed}/${roomLimit} room${roomLimit>1?'s':''}`;
+}
+function handleFileSelect(e) {
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=ev=>{const th=document.getElementById('preview-thumb');th.src=ev.target.result;th.style.display='block';};
+  r.readAsDataURL(file);
+}
+function selectRoom(btn) {
+  document.querySelectorAll('.room-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function setQuality(q, btn) {
+  selectedQuality = q;
+  document.querySelectorAll('#q-schnell,#q-dev,#q-pro').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function getUploadedFile() {
+  return document.getElementById('file-input')?.files?.[0] || null;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = () => rej(new Error('read fail'));
+    r.readAsDataURL(file);
+  });
+}
+
+function applyVisualFallback(imgs, dataUrl) {
+  // Show original photo with CSS filters as earthquake / safe versions
+  if (dataUrl && imgs[1]) {
+    imgs[1].src = dataUrl;
+    imgs[1].style.cssText = 'filter:saturate(.4) brightness(.55) contrast(1.4) sepia(.25);transform:rotate(-1.5deg) scale(1.03);transition:all .4s;';
+  }
+  if (dataUrl && imgs[2]) {
+    imgs[2].src = dataUrl;
+    imgs[2].style.cssText = 'filter:saturate(1.15) brightness(1.08) hue-rotate(6deg);transition:all .4s;';
+  }
+}
+
+async function uploadFileToFal(file) {
+  // fal.ai file upload endpoint
+  const res = await fetch('https://rest.alpha.fal.ai/storage/upload/initiate', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Key ${FAL_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ content_type: file.type, file_name: file.name })
+  });
+  if (!res.ok) return null;
+  const { upload_url, file_url } = await res.json();
+
+  // Upload the actual file
+  await fetch(upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file
+  });
+  return file_url;
+}
+
+async function falGenerate(model, inputParams) {
+  const res = await fetch(`https://fal.run/${model}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Key ${FAL_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(inputParams)
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.images?.[0]?.url || null;
+}
+
+async function generateImages(roomLabel) {
+  const file = getUploadedFile();
+  const imgs = document.querySelectorAll('.comp-img-wrap img');
+
+  // Step 1: Show original photo immediately in slot 1
+  let dataUrl = null;
+  if (file) {
+    dataUrl = await fileToDataUrl(file);
+    if (imgs[0]) { imgs[0].src = dataUrl; imgs[0].style.cssText = ''; }
+  }
+
+  // Step 2: Try to upload to fal storage for image-to-image
+  let falImageUrl = null;
+  if (file && FAL_KEY) {
+    try { falImageUrl = await uploadFileToFal(file); } catch(e) { console.warn('fal upload failed:', e); }
+  }
+
+  const steps = selectedQuality === 'schnell' ? 4 : 28;
+
+  const riskPrompt = `${roomLabel} interior during a violent earthquake: furniture toppling, items flying off shelves, dust and debris, red emergency lighting, cracked walls, chaos, photorealistic disaster`;
+  const safePrompt = `${roomLabel} interior perfectly prepared for earthquake safety: furniture anchored to walls, TV secured, clear pathways, soft warm lighting, organized and safe, photorealistic`;
+
+  try {
+    let riskUrl = null, safeUrl = null;
+
+    if (falImageUrl) {
+      // Image-to-image: use uploaded photo
+      [riskUrl, safeUrl] = await Promise.all([
+        falGenerate('fal-ai/flux/dev/image-to-image', {
+          prompt: riskPrompt, image_url: falImageUrl,
+          strength: 0.85, num_inference_steps: steps, num_images: 1, image_size: 'landscape_4_3'
+        }),
+        falGenerate('fal-ai/flux/dev/image-to-image', {
+          prompt: safePrompt, image_url: falImageUrl,
+          strength: 0.80, num_inference_steps: steps, num_images: 1, image_size: 'landscape_4_3'
+        })
+      ]);
+    } else {
+      // Text-to-image fallback
+      [riskUrl, safeUrl] = await Promise.all([
+        falGenerate('fal-ai/flux/schnell', { prompt: riskPrompt, num_inference_steps: 4, num_images: 1, image_size: 'landscape_4_3' }),
+        falGenerate('fal-ai/flux/schnell', { prompt: safePrompt, num_inference_steps: 4, num_images: 1, image_size: 'landscape_4_3' })
+      ]);
+    }
+
+    if (riskUrl && imgs[1]) { imgs[1].src = riskUrl; imgs[1].style.cssText = ''; }
+    else applyVisualFallback(imgs.length ? [null, imgs[1]] : [], dataUrl);
+
+    if (safeUrl && imgs[2]) { imgs[2].src = safeUrl; imgs[2].style.cssText = ''; }
+    else if (imgs[2]) { imgs[2].src = dataUrl || imgs[2].src; imgs[2].style.cssText = 'filter:saturate(1.2) brightness(1.1) hue-rotate(10deg);'; }
+
+    if (riskUrl || safeUrl) {
+      const demoBanner = document.getElementById('demo-txt');
+      if (demoBanner) demoBanner.innerHTML = currentLang === 'tr'
+        ? '<strong>AI Görseli</strong> — ' + (falImageUrl ? 'Odana özel üretildi.' : 'fal.ai ile üretildi.')
+        : '<strong>AI Generated</strong> — ' + (falImageUrl ? 'Generated from your room.' : 'Generated by fal.ai.');
+      showToast(currentLang === 'tr' ? '🎨 AI görselleri hazır!' : '🎨 AI images ready!');
+    }
+  } catch(err) {
+    console.error('fal.ai error:', err);
+    applyVisualFallback(imgs, dataUrl);
+  }
+}
+
+async function analyzeRoomWithGemini(roomId, imageBase64, imageMime) {
+  const isTR = currentLang === 'tr';
+  const roomNames = {tr:{salon:"salon",yatak:"yatak odasi",mutfak:"mutfak",cocuk:"cocuk odasi"},en:{salon:"living room",yatak:"bedroom",mutfak:"kitchen",cocuk:"children's room"}};
+  const roomLabel = roomNames[isTR ? 'tr' : 'en'][roomId] || (isTR ? 'oda' : 'room');
+  const prompt = isTR
+    ? `Bu bir ${roomLabel} fotografi. Deprem guvenligi uzmani olarak analiz et. SADECE asagidaki JSON formatinda yanitla, baska hicbir sey yazma:\n{\n  "risks": [\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"high"},\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"high"},\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"high"},\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"medium"},\n    {"icon":"emoji","title":"baslik","desc":"aciklama","severity":"medium"}\n  ],\n  "checklist": [\n    {"text":"is1","priority":"high"},{"text":"is2","priority":"high"},{"text":"is3","priority":"high"},{"text":"is4","priority":"medium"},{"text":"is5","priority":"medium"}\n  ],\n  "shelter": {\n    "best":"En iyi yer","bestDesc":"Aciklama","second":"2. secenek","secondDesc":"Aciklama",\n    "avoid":["kacin1","kacin2","kacin3","kacin4"]\n  }\n}`
+    : `This is a ${roomLabel} photo. As earthquake safety expert, analyze it. Respond ONLY with JSON:\n{\n  "risks": [\n    {"icon":"emoji","title":"title","desc":"desc","severity":"high"},\n    {"icon":"emoji","title":"title","desc":"desc","severity":"high"},\n    {"icon":"emoji","title":"title","desc":"desc","severity":"high"},\n    {"icon":"emoji","title":"title","desc":"desc","severity":"medium"},\n    {"icon":"emoji","title":"title","desc":"desc","severity":"medium"}\n  ],\n  "checklist": [\n    {"text":"item1","priority":"high"},{"text":"item2","priority":"high"},{"text":"item3","priority":"high"},{"text":"item4","priority":"medium"},{"text":"item5","priority":"medium"}\n  ],\n  "shelter": {\n    "best":"Best spot","bestDesc":"Desc","second":"2nd","secondDesc":"Desc",\n    "avoid":["avoid1","avoid2","avoid3","avoid4"]\n  }\n}`;
+  try {
+    const raw = imageBase64 ? await callGemini(prompt, imageBase64, imageMime) : await callGemini(prompt);
+    if (!raw) return null;
+    const cleaned = raw.replace(/```json|```/g,"").trim();
+    return JSON.parse(cleaned);
+  } catch(e) { console.error("Gemini analysis error:", e); return null; }
+}
+
+function getRoomAnalysis(roomId, lang) {
+  const isTR = lang === 'tr';
+  const data = {
+    salon: {
+      risks: isTR ? [
+        {icon:'🗄️', t:'Sabitlenmemiş Dolap', d:'Yüksekliği nedeniyle devrilme riski kritik.', s:'high'},
+        {icon:'📺', t:'TV Sabitleme Eksik', d:'Düz ekranlar depremde fırlayabilir.', s:'high'},
+        {icon:'🪑', t:'Kanepe Pencere Önü', d:'Cam kırılması riski yüksek.', s:'high'},
+        {icon:'🕯️', t:'Dekoratif Objeler', d:'Raf üstündeki ağır dekorlar düşebilir.', s:'medium'},
+        {icon:'🚪', t:'Kaçış Yolu', d:'Mobilya yerleşimi çıkışı daraltıyor olabilir.', s:'medium'},
+      ] : [
+        {icon:'🗄️', t:'Unsecured Cabinet', d:'High fall risk due to its height.', s:'high'},
+        {icon:'📺', t:'TV Not Anchored', d:'Flat screens can fly off during shaking.', s:'high'},
+        {icon:'🪑', t:'Sofa Near Window', d:'High risk from breaking glass.', s:'high'},
+        {icon:'🕯️', t:'Decorative Objects', d:'Heavy decor on shelves may fall.', s:'medium'},
+        {icon:'🚪', t:'Escape Route', d:'Furniture layout may narrow exit.', s:'medium'},
+      ],
+      checklist: isTR ? [
+        {t:'Dolabı duvara L-braketi ile sabitle', p:'high'},
+        {t:'TV\'yi anti-tip kayışı ile sabitle', p:'high'},
+        {t:'Kanepeyi pencereden uzağa taşı', p:'high'},
+        {t:'Raf dekorlarını alt raflara indir', p:'medium'},
+        {t:'Kapı önündeki eşyaları çek', p:'medium'},
+      ] : [
+        {t:'Anchor cabinet to wall with L-bracket', p:'high'},
+        {t:'Secure TV with anti-tip strap', p:'high'},
+        {t:'Move sofa away from windows', p:'high'},
+        {t:'Move shelf decor to lower shelves', p:'medium'},
+        {t:'Clear items blocking doorway', p:'medium'},
+      ],
+      shelter: isTR
+        ? {best:'Sağlam İç Duvar Yanı', bestDesc:'Pencereden uzak, iç duvar dibinde Çök-Kapan-Tutun.', second:'Kanepe Yanı', secondDesc:'Kanepenin yanına çök, ÜSTÜNE değil.', third:'İç Koridor', thirdDesc:'Sarsıntı devam ediyorsa koridora geç.', avoid:['Pencere önü — cam kırılabilir','TV karşısı — fırlayabilir','Büyük dolap yanı — devrilebilir','Dış duvarlar — daha fazla hareket eder']}
+        : {best:'Inner Wall Side', bestDesc:'Away from windows, Drop-Cover-Hold near inner wall.', second:'Beside Sofa', secondDesc:'Drop BESIDE the sofa, not under it.', third:'Inner Hallway', thirdDesc:'Move to hallway if shaking continues.', avoid:['Near windows — glass can shatter','Facing TV — it can fly off','Beside tall cabinet — can topple','Outer walls — move more']},
+    },
+    yatak: {
+      risks: isTR ? [
+        {icon:'🖼️', t:'Tablo / Ayna Yatak Üstü', d:'Ağır çerçeve uyku sırasında düşebilir.', s:'high'},
+        {icon:'🗄️', t:'Gardrop Sabitlenmemiş', d:'Gardrop devrilmesi ciddi yaralanmaya neden olur.', s:'high'},
+        {icon:'💡', t:'Abajur / Aydınlatma', d:'Başucundaki armatür düşebilir.', s:'high'},
+        {icon:'📚', t:'Yatak Başı Raf', d:'Kitap ve objeler uykuda başa düşebilir.', s:'medium'},
+        {icon:'🚪', t:'Çıkış Mesafesi', d:'Yatak kapı önünü kapatıyor olabilir.', s:'medium'},
+      ] : [
+        {icon:'🖼️', t:'Picture / Mirror Above Bed', d:'Heavy frame can fall during sleep.', s:'high'},
+        {icon:'🗄️', t:'Wardrobe Not Secured', d:'Toppling wardrobe causes serious injury.', s:'high'},
+        {icon:'💡', t:'Bedside Lamp / Fixture', d:'Bedside lighting can fall.', s:'high'},
+        {icon:'📚', t:'Headboard Shelf', d:'Books and objects can fall on head while sleeping.', s:'medium'},
+        {icon:'🚪', t:'Exit Distance', d:'Bed may be blocking door path.', s:'medium'},
+      ],
+      checklist: isTR ? [
+        {t:'Yatak üstündeki tablo/aynayı kaldır ya da sabitle', p:'high'},
+        {t:'Gardrobu duvara L-braketi ile sabitle', p:'high'},
+        {t:'Baş ucuna küçük bir deprem çantası hazırla', p:'high'},
+        {t:'Yatak başı rafını boşalt ya da sabitle', p:'medium'},
+        {t:'Geceleri uyurken yatağın yanında ayakkabı bulundur', p:'medium'},
+      ] : [
+        {t:'Remove or secure picture/mirror above bed', p:'high'},
+        {t:'Anchor wardrobe to wall with L-bracket', p:'high'},
+        {t:'Prepare a small emergency bag near the bed', p:'high'},
+        {t:'Clear or secure headboard shelf', p:'medium'},
+        {t:'Keep shoes near bed for nighttime emergencies', p:'medium'},
+      ],
+      shelter: isTR
+        ? {best:'Yatak Yanı Zemin', bestDesc:'Deprem gece olursa yataktan in, yanına çök, başını koru.', second:'İç Duvar Dibi', secondDesc:'Gardroptan uzak, iç duvara sokulun.', third:'Kapı Eşiği', thirdDesc:'Ancak yapısal açıdan güçlüyse.', avoid:['Yatak ÜSTÜNDE kalmak — tavan alçıpanı düşebilir','Gardrop önü — devrilebilir','Pencere önü — cam kırılabilir','Balkon kapısı önü']}
+        : {best:'Floor Beside Bed', bestDesc:'If quake hits at night, get off bed, drop beside it, protect head.', second:'Inner Wall', secondDesc:'Stay away from wardrobe, crouch against inner wall.', third:'Doorway', thirdDesc:'Only if structurally reinforced.', avoid:['Staying ON the bed — ceiling can fall','In front of wardrobe — can topple','Near windows — glass breaks','Near balcony door']},
+    },
+    mutfak: {
+      risks: isTR ? [
+        {icon:'🔪', t:'Dolap Kapakları Açılır', d:'Üst dolaplar açılarak içindekiler dökülür.', s:'high'},
+        {icon:'🔥', t:'Ocak Güvenliği', d:'Deprem sırasında gaz açık kalabilir, yangın riski.', s:'high'},
+        {icon:'🍶', t:'Cam Eşyalar', d:'Bardak ve tabaklar kırılarak tehlike yaratır.', s:'high'},
+        {icon:'🧯', t:'Yangın Tüpü Yok', d:'Mutfakta yangın söndürücü bulunmuyor.', s:'medium'},
+        {icon:'🚿', t:'Su Kesintisi Hazırlığı', d:'Deprem sonrası su gelmeyebilir.', s:'medium'},
+      ] : [
+        {icon:'🔪', t:'Cabinet Doors Open', d:'Upper cabinets fly open spilling contents.', s:'high'},
+        {icon:'🔥', t:'Gas Stove Risk', d:'Gas may stay open during quake, fire hazard.', s:'high'},
+        {icon:'🍶', t:'Glass Items', d:'Glasses and plates shatter creating danger.', s:'high'},
+        {icon:'🧯', t:'No Fire Extinguisher', d:'No fire extinguisher visible in kitchen.', s:'medium'},
+        {icon:'🚿', t:'Water Supply', d:'Water may be cut off after earthquake.', s:'medium'},
+      ],
+      checklist: isTR ? [
+        {t:'Üst dolaplara mandallı kilit tak', p:'high'},
+        {t:'Ana gaz vanasının yerini öğren, hemen kapat', p:'high'},
+        {t:'Cam eşyaları alt dolaplara taşı', p:'high'},
+        {t:'Mutfağa yangın söndürücü al', p:'medium'},
+        {t:'10 litrelik içme suyu stoku tut', p:'medium'},
+      ] : [
+        {t:'Install latches on upper cabinet doors', p:'high'},
+        {t:'Learn location of main gas valve, close immediately', p:'high'},
+        {t:'Move glassware to lower cabinets', p:'high'},
+        {t:'Get a fire extinguisher for the kitchen', p:'medium'},
+        {t:'Keep 10L drinking water stock', p:'medium'},
+      ],
+      shelter: isTR
+        ? {best:'Sağlam Masa Altı', bestDesc:'Varsa masanın altına gir, ayaklarını tut.', second:'İç Duvar Dibi', secondDesc:'Ocak ve dolap aralarından uzak.', third:'Koridora Çık', thirdDesc:'Mutfaktan çıkmak en güvenlisi.', avoid:['Ocak önü — gaz/yangın riski','Cam dolap önü — kırılabilir','Buzdolabı yanı — devrilebilir','Pencere önü']}
+        : {best:'Under Sturdy Table', bestDesc:'Get under the table and hold the legs.', second:'Inner Wall', secondDesc:'Away from stove and cabinets.', third:'Exit to Hallway', thirdDesc:'Leaving kitchen is safest.', avoid:['In front of stove — gas/fire risk','In front of glass cabinet — can break','Next to refrigerator — can topple','Near windows']},
+    },
+    cocuk: {
+      risks: isTR ? [
+        {icon:'🧸', t:'Oyuncak Rafı Sabitlenmemiş', d:'Ağır oyuncaklar çocuğun üstüne düşebilir.', s:'high'},
+        {icon:'🛏️', t:'Ranza / Yüksek Yatak', d:'Sarsıntıda düşme riski çok yüksek.', s:'high'},
+        {icon:'📺', t:'TV / Ekran Güvensiz', d:'Çocuklar ekrana yakın oturduğu için risk artar.', s:'high'},
+        {icon:'🪟', t:'Pencere Yanı Oyun Alanı', d:'Çocuklar depremde pencereye koşabilir.', s:'medium'},
+        {icon:'🎒', t:'Çocuk Çantası Hazır Değil', d:'Çocuğa özel deprem çantası eksik.', s:'medium'},
+      ] : [
+        {icon:'🧸', t:'Toy Shelf Not Secured', d:'Heavy toys can fall on child.', s:'high'},
+        {icon:'🛏️', t:'Bunk Bed / High Bed', d:'Very high fall risk during shaking.', s:'high'},
+        {icon:'📺', t:'TV / Screen Unsecured', d:'Children sit close to screens, higher risk.', s:'high'},
+        {icon:'🪟', t:'Play Area Near Window', d:'Children may run to window during quake.', s:'medium'},
+        {icon:'🎒', t:'Child Emergency Bag Missing', d:'No child-specific emergency kit visible.', s:'medium'},
+      ],
+      checklist: isTR ? [
+        {t:'Oyuncak rafını duvara sabitle', p:'high'},
+        {t:'Ranzanın alt yatağını kullan, üstünü boşalt', p:'high'},
+        {t:'TV\'yi anti-tip kayışı ile sabitle', p:'high'},
+        {t:'Çocuğa deprem tatbikatı yaptır', p:'medium'},
+        {t:'Çocuğa özel deprem çantası hazırla', p:'medium'},
+      ] : [
+        {t:'Anchor toy shelf to wall', p:'high'},
+        {t:'Use bottom bunk only, keep top bunk clear', p:'high'},
+        {t:'Secure TV with anti-tip strap', p:'high'},
+        {t:'Practice earthquake drill with child', p:'medium'},
+        {t:'Prepare child-specific emergency kit', p:'medium'},
+      ],
+      shelter: isTR
+        ? {best:'Sağlam Masa Altı', bestDesc:'Çocuğa Çök-Kapan-Tutun pozisyonunu öğret.', second:'İç Duvar Dibi', secondDesc:'Pencereden ve raflardan uzak.', third:'Kapı Eşiği', thirdDesc:'Yapısal güvenli kapılarda.', avoid:['Pencereye koşmak','Ranza üstünde kalmak','Oyuncak rafı önünde durmak','Balkona çıkmak']}
+        : {best:'Under Sturdy Table', bestDesc:'Teach child Drop-Cover-Hold position.', second:'Inner Wall', secondDesc:'Away from windows and shelves.', third:'Doorway', thirdDesc:'Only structurally reinforced doors.', avoid:['Running to windows','Staying on top bunk','Standing near toy shelf','Going to balcony']},
+    }
+  };
+  return data[roomId] || data['salon'];
+}
+
+function applyAnalysisToDOM(roomId, aiData) {
+  const isTR = currentLang === 'tr';
+  const staticAnalysis = getRoomAnalysis(roomId, currentLang);
+
+  // Use Gemini AI data if available, else use static fallback
+  const risks = aiData?.risks?.length ? aiData.risks.map(r => ({
+    icon: r.icon || '⚠️', t: r.title, d: r.desc, s: r.severity
+  })) : staticAnalysis.risks;
+
+  const checklist = aiData?.checklist?.length ? aiData.checklist.map(c => ({
+    t: c.text, p: c.priority
+  })) : staticAnalysis.checklist;
+
+  const shelter = aiData?.shelter ? {
+    best: aiData.shelter.best,
+    bestDesc: aiData.shelter.bestDesc,
+    second: aiData.shelter.second,
+    secondDesc: aiData.shelter.secondDesc,
+    avoid: aiData.shelter.avoid || []
+  } : staticAnalysis.shelter;
+
+  const critCount = risks.filter(r => r.s === 'high').length;
+
+  // Badge
+  const badge = document.getElementById('res-badge');
+  if (badge) badge.textContent = isTR
+    ? `🔴 Yüksek Risk — ${risks.length} tehlike noktası`
+    : `🔴 High Risk — ${risks.length} danger points`;
+
+  // Stats
+  try {
+    const nums = document.querySelectorAll('.risk-stat-number');
+    if (nums[0]) nums[0].textContent = risks.length;
+    if (nums[1]) nums[1].textContent = critCount;
+    if (nums[2]) nums[2].textContent = '%' + Math.min(95, 60 + critCount * 8);
+  } catch(e){}
+
+  // Risk cards
+  risks.forEach((r, i) => {
+    const ti = document.getElementById(`r${i+1}t`); if (ti) ti.textContent = r.t;
+    const di = document.getElementById(`r${i+1}d`); if (di) di.textContent = r.d;
+    const si = document.getElementById(`r${i+1}s`);
+    if (si) {
+      si.textContent = r.s === 'high' ? (isTR ? 'Kritik' : 'Critical') : (isTR ? 'Orta' : 'Medium');
+      si.className = `severity ${r.s === 'high' ? 'sev-high' : 'sev-med'}`;
+    }
+    const icon = document.querySelectorAll('.risk-icon-wrap')[i];
+    if (icon) icon.textContent = r.icon || '⚠️';
+  });
+
+  // Checklist
+  checklist.forEach((c, i) => {
+    const ct = document.getElementById(`c${i+1}`); if (ct) ct.textContent = c.t;
+    const cp = document.getElementById(`c${i+1}p`);
+    if (cp) {
+      cp.textContent = c.p === 'high' ? (isTR ? 'Kritik' : 'Critical') : (isTR ? 'Orta' : 'Medium');
+      cp.className = `check-priority ${c.p === 'high' ? 'pri-high' : 'pri-med'}`;
+    }
+  });
+
+  // Shelter
+  const bestEl = document.querySelector('.shelter-best h4'); if (bestEl) bestEl.textContent = shelter.best;
+  const bestDescEl = document.querySelector('.shelter-best p'); if (bestDescEl) bestDescEl.textContent = shelter.bestDesc;
+  try {
+    const avoidItems = document.querySelectorAll('.avoid-item');
+    shelter.avoid.forEach((a, i) => { if (avoidItems[i]) avoidItems[i].textContent = a; });
+  } catch(e){}
+
+  if (aiData) showToast(isTR ? '🤖 Gemini odanı analiz etti!' : '🤖 Gemini analyzed your room!');
+}
+
+function startAnalysis() {
+  if (roomsUsed>=roomLimit) {
+    showToast(currentLang==='tr'?'❌ Limit doldu! Planını yükselt.':'❌ Limit reached! Upgrade plan.');
+    setTimeout(()=>showScreen('screen-pricing'),1200); return;
+  }
+  roomsUsed++; updateUsageBar();
+  showScreen('screen-loading');
+  const steps=['step-1','step-2','step-3','step-4']; let i=0;
+  const activeRoom = document.querySelector('.room-btn.active:not(#q-schnell):not(#q-dev):not(#q-pro)');
+  const roomId = activeRoom ? activeRoom.id.replace('r-','') : 'salon';
+  const roomNames = {tr:{salon:'salon',yatak:'yatak odası',mutfak:'mutfak',cocuk:'çocuk odası'},en:{salon:'living room',yatak:'bedroom',mutfak:'kitchen',cocuk:"children's room"}};
+  const roomLabel = roomNames[currentLang][roomId] || 'salon';
+
+  // Get uploaded file for Gemini Vision
+  const uploadedFile = getUploadedFile();
+  let geminiAnalysisPromise = null;
+
+  if (uploadedFile) {
+    // Convert to base64 for Gemini Vision
+    const reader = new FileReader();
+    geminiAnalysisPromise = new Promise(res => {
+      reader.onload = e => {
+        const b64 = e.target.result.split(',')[1];
+        res(analyzeRoomWithGemini(roomId, b64, uploadedFile.type));
+      };
+      reader.onerror = () => res(null);
+      reader.readAsDataURL(uploadedFile);
+    });
+  } else {
+    geminiAnalysisPromise = analyzeRoomWithGemini(roomId, null, null);
+  }
+
+  // Start image generation in background
+  generateImages(roomLabel);
+
+  function next(){
+    if(i>0){const p=document.getElementById(steps[i-1]);p.classList.remove('active');p.classList.add('done');p.querySelector('.step-icon').textContent='✓';}
+    if(i<steps.length){document.getElementById(steps[i]).classList.add('active');i++;setTimeout(next,900);}
+    else {
+      geminiAnalysisPromise.then(aiData => {
+        applyAnalysisToDOM(roomId, aiData);
+        saveToHistory(roomId, 5);
+        updateAccountUI();
+        showScreen('screen-results');
+      });
+    }
+  }
+  setTimeout(next,300);
+}
+
+// ── CHAT ──
+function toggleChat() {
+  chatOpen = !chatOpen;
+  const panel = document.getElementById('chat-panel');
+  const fab = document.getElementById('chat-fab');
+  panel.classList.toggle('open', chatOpen);
+  fab.textContent = chatOpen ? '✕' : '💬';
+  if (chatOpen && chatHistory.length === 0) {
+    const greeting = currentLang==='tr'
+      ? 'Merhaba! 👋 Deprem güvenliği veya ev düzenlemesi hakkında her şeyi sorabilirsin. Örneğin: "Hangi koltuk daha güvenli?", "Depremde nerede durmalıyım?" veya "Yeni aldığım dolabı nereye koymalıyım?" 🏠'
+      : 'Hello! 👋 You can ask me anything about earthquake safety or home arrangement. For example: "Which sofa is safer?", "Where should I stay during an earthquake?" or "Where should I place my new cabinet?" 🏠';
+    addBotMessage(greeting);
+  }
+}
+
+function addBotMessage(text) {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg bot';
+  div.innerHTML = `<div class="chat-msg-avatar">🤖</div><div class="chat-bubble">${text}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  chatHistory.push({role:'assistant', content:text});
+}
+
+function addUserMessage(text) {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg user';
+  div.innerHTML = `<div class="chat-msg-avatar">${loggedInUser ? loggedInUser.initials[0] : '👤'}</div><div class="chat-bubble">${text}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  chatHistory.push({role:'user', content:text});
+}
+
+function showTyping() {
+  const msgs = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg bot'; div.id = 'typing-indicator';
+  div.innerHTML = `<div class="chat-msg-avatar">🤖</div><div class="chat-typing"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typing-indicator');
+  if (t) t.remove();
+}
+
+async function callGemini(promptText, imageBase64, imageMime) {
+  const parts = [];
+  if (imageBase64) {
+    parts.push({ inline_data: { mime_type: imageMime || 'image/jpeg', data: imageBase64 } });
+  }
+  parts.push({ text: promptText });
+
+  const res = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error('Gemini error:', err);
+    return null;
+  }
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  document.getElementById('chat-suggestions').style.display = 'none';
+  addUserMessage(text);
+  showTyping();
+  try {
+    const systemPrompt = currentLang === 'tr'
+      ? `Sen QuakeReady uygulamasının yapay zeka asistanısın. Deprem güvenliği, ev düzeni ve mobilya seçimi konusunda uzman Türk bir danışmansın. Kısa, net ve pratik cevaplar ver. Emoji kullanabilirsin. Sadece Türkçe cevap ver. Önceki mesajlar:\n`
+      : `You are the AI assistant of QuakeReady app, an expert earthquake safety consultant. Give short, clear, practical answers. You can use emojis. Answer in English only. Previous messages:\n`;
+
+    const history = chatHistory.slice(-8).map(m => `${m.role === 'user' ? 'Kullanıcı' : 'Asistan'}: ${m.content}`).join('\n');
+    const fullPrompt = systemPrompt + history + `\nKullanıcı: ${text}\nAsistan:`;
+
+    const reply = await callGemini(fullPrompt);
+    removeTyping();
+    addBotMessage(reply || (currentLang==='tr' ? 'Bir hata oluştu, tekrar dene.' : 'An error occurred, try again.'));
+  } catch(err) {
+    removeTyping();
+    addBotMessage(currentLang==='tr' ? '⚠️ Bağlantı hatası, tekrar dene.' : '⚠️ Connection error, try again.');
+  }
+}
+
+function sendSuggestion(el) {
+  document.getElementById('chat-input').value = el.textContent;
+  sendChatMessage();
+}
+
+function chatKeyDown(e) {
+  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+}
+
+// ── MODAL ──
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+document.addEventListener('click', e => {
+  document.querySelectorAll('.modal-overlay').forEach(m => {
+    if (e.target === m) m.classList.remove('open');
+  });
+});
+
+// ── MISC ──
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+  if (id === 'screen-results' || id === 'screen-upload') {
+    document.getElementById('chat-fab').classList.add('show');
+  } else {
+    document.getElementById('chat-fab').classList.remove('show');
+    if (chatOpen) toggleChat();
+  }
+}
+function toggleCheck(item){ item.classList.toggle('checked'); }
+function goBack(){ showScreen('screen-upload'); }
+function openDrawer(panel){
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('settings-drawer').classList.add('open');
+  document.getElementById('panel-settings').style.display=panel==='settings'?'block':'none';
+  document.getElementById('panel-help').style.display=panel==='help'?'block':'none';
+  document.getElementById('drawer-title').textContent=panel==='settings'
+    ?(currentLang==='tr'?'⚙️ Ayarlar':'⚙️ Settings')
+    :(currentLang==='tr'?'❓ Yardım':'❓ Help');
+}
+function closeDrawer(){
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('settings-drawer').classList.remove('open');
+}
+function sendHelp(){
+  const e=document.getElementById('help-email').value,m=document.getElementById('help-msg').value;
+  if(!e||!m){showToast(currentLang==='tr'?'⚠️ Tüm alanları doldurun':'⚠️ Fill all fields');return;}
+  document.getElementById('help-form').style.display='none';
+  document.getElementById('help-sent').style.display='block';
+  showToast(currentLang==='tr'?'✅ Mesajın gönderildi!':'✅ Message sent!');
+}
+function showToast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;
+  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);
+}
+function toggleLang(){ setLang(currentLang==='tr'?'en':'tr'); }
+
+// ── ACCOUNT ──
+// ── CUSTOM CONFIRM ──
+let confirmCallback = null;
+function showConfirm(title, msg, okLabel, cb) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-msg').textContent = msg;
+  document.getElementById('confirm-ok-btn').textContent = okLabel;
+  document.getElementById('confirm-cancel-btn').textContent = currentLang==='tr'?'İptal':'Cancel';
+  confirmCallback = cb;
+  openModal('modal-confirm');
+}
+function confirmAction() {
+  closeModal('modal-confirm');
+  if (confirmCallback) { confirmCallback(); confirmCallback = null; }
+}
+
+// ── ACCOUNT ──
+function updateAccountUI() {
+  if (!loggedInUser) return;
+  document.getElementById('acct-avatar').textContent = loggedInUser.initials[0].toUpperCase();
+  document.getElementById('acct-name').textContent = loggedInUser.name;
+  document.getElementById('acct-email').textContent = loggedInUser.email;
+  const pl = userPlan==='free'?(currentLang==='tr'?'Ücretsiz':'Free'):userPlan==='pro'?'Pro':'Max';
+  document.getElementById('lbl-my-plan').textContent = (currentLang==='tr'?'Planım: ':'My Plan: ') + pl;
+}
+function showUpgradePlan() { closeDrawer(); showScreen('screen-pricing'); }
+function openHistoryScreen() { closeDrawer(); renderHistory(); showScreen('screen-history'); }
+function goBackFromHistory() { showScreen('screen-upload'); }
+
+function logoutUser() {
+  showConfirm(
+    currentLang==='tr'?'🚪 Çıkış Yap':'🚪 Sign Out',
+    currentLang==='tr'?'Çıkış yapmak istediğinizden emin misiniz?':'Are you sure you want to sign out?',
+    currentLang==='tr'?'Çıkış Yap':'Sign Out',
+    () => {
+      loggedInUser = null; userPlan = 'free'; roomLimit = 1; roomsUsed = 0;
+      document.getElementById('plan-badge').style.display = 'none';
+      document.getElementById('acct-avatar').textContent = '?';
+      document.getElementById('acct-name').textContent = currentLang==='tr'?'Misafir':'Guest';
+      document.getElementById('acct-email').textContent = currentLang==='tr'?'Giriş yapılmadı':'Not signed in';
+      document.getElementById('lbl-my-plan').textContent = currentLang==='tr'?'Planım: Ücretsiz':'My Plan: Free';
+      updateUsageBar(); closeDrawer();
+      showScreen('screen-auth');
+      showToast(currentLang==='tr'?'👋 Çıkış yapıldı.':'👋 Signed out.');
+    }
+  );
+}
+
+function deleteAccount() {
+  showConfirm(
+    currentLang==='tr'?'🗑 Hesabı Sil':'🗑 Delete Account',
+    currentLang==='tr'?'Hesabınız ve tüm verileriniz kalıcı olarak silinecek. Bu işlem geri alınamaz.':'Your account and all data will be permanently deleted. This cannot be undone.',
+    currentLang==='tr'?'Evet, Sil':'Yes, Delete',
+    () => {
+      analysisHistory.length = 0; loggedInUser = null;
+      userPlan = 'free'; roomLimit = 1; roomsUsed = 0;
+      document.getElementById('plan-badge').style.display = 'none';
+      document.getElementById('acct-avatar').textContent = '?';
+      document.getElementById('acct-name').textContent = currentLang==='tr'?'Misafir':'Guest';
+      document.getElementById('acct-email').textContent = currentLang==='tr'?'Giriş yapılmadı':'Not signed in';
+      updateUsageBar(); closeDrawer();
+      showScreen('screen-auth');
+      showToast(currentLang==='tr'?'🗑 Hesap silindi.':'🗑 Account deleted.');
+    }
+  );
+}
+
+// ── HISTORY ──
+const analysisHistory = [];
+let renameTargetId = null;
+
+function saveToHistory(roomType, riskCount) {
+  const rn = {tr:{salon:'Salon',yatak:'Yatak Odası',mutfak:'Mutfak',cocuk:'Çocuk Odası'},en:{salon:'Living Room',yatak:'Bedroom',mutfak:'Kitchen',cocuk:"Children's Room"}};
+  analysisHistory.unshift({
+    id: Date.now(),
+    label: rn[currentLang][roomType] || roomType,
+    date: new Date().toLocaleDateString(currentLang==='tr'?'tr-TR':'en-US'),
+    time: new Date().toLocaleTimeString(currentLang==='tr'?'tr-TR':'en-US', {hour:'2-digit',minute:'2-digit'}),
+    room: roomType, risks: riskCount,
+    score: Math.floor(Math.random()*30) + 60
+  });
+}
+
+function openHistoryItem(id) {
+  const item = analysisHistory.find(a => a.id === id);
+  if (!item) return;
+  const rt = document.getElementById('res-title');
+  if (rt) rt.innerHTML = (currentLang==='tr'?'Analiz: ':'Analysis: ') + '<span style="color:var(--accent2)">' + item.label + '</span>';
+  showScreen('screen-results');
+  showToast((currentLang==='tr'?'📂 Açıldı: ':'📂 Opened: ') + item.label);
+}
+
+function startRename(id) {
+  renameTargetId = id;
+  const item = analysisHistory.find(a => a.id === id);
+  document.getElementById('rename-input').value = item ? item.label : '';
+  document.getElementById('rename-title').textContent = currentLang==='tr'?'✏️ Adı Değiştir':'✏️ Rename';
+  document.getElementById('rename-btn').textContent = currentLang==='tr'?'Kaydet':'Save';
+  openModal('modal-rename');
+  setTimeout(() => document.getElementById('rename-input').focus(), 120);
+}
+
+function applyRename() {
+  const val = document.getElementById('rename-input').value.trim();
+  if (!val) { showToast(currentLang==='tr'?'⚠️ Ad boş olamaz':'⚠️ Name cannot be empty'); return; }
+  const item = analysisHistory.find(a => a.id === renameTargetId);
+  if (item) { item.label = val; closeModal('modal-rename'); renderHistory(); showToast(currentLang==='tr'?'✅ Ad güncellendi':'✅ Name updated'); }
+}
+
+function deleteHistoryItem(id) {
+  showConfirm(
+    currentLang==='tr'?'🗑 Analizi Sil':'🗑 Delete Analysis',
+    currentLang==='tr'?'Bu analiz kaydı silinecek. Emin misiniz?':'This analysis record will be deleted. Are you sure?',
+    currentLang==='tr'?'Sil':'Delete',
+    () => { const idx = analysisHistory.findIndex(a => a.id === id); if (idx > -1) analysisHistory.splice(idx, 1); renderHistory(); showToast(currentLang==='tr'?'🗑 Silindi':'🗑 Deleted'); }
+  );
+}
+
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  document.getElementById('hist-title').textContent = currentLang==='tr'?'Analiz Geçmişi':'Analysis History';
+  document.getElementById('hist-sub').textContent = currentLang==='tr'?'Daha önce analiz ettiğin odalar':'Your previously analyzed rooms';
+  if (analysisHistory.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📋</div><div style="font-size:1rem;font-weight:600;color:var(--text);margin-bottom:8px">'+(currentLang==='tr'?'Henüz analiz yapılmadı':'No analyses yet')+'</div><div style="font-size:.84rem">'+(currentLang==='tr'?'Bir oda fotoğrafı yükleyerek başla.':'Upload a room photo to get started.')+'</div></div>';
+    return;
+  }
+  const emoji = {salon:'🛋️',yatak:'🛏️',mutfak:'🍳',cocuk:'🧸'};
+  el.innerHTML = analysisHistory.map((a,i) => {
+    const e = emoji[a.room]||'🏠';
+    const delay = (i*0.08).toFixed(2);
+    const renameTitle = currentLang==='tr'?'Adı değiştir':'Rename';
+    const deleteTitle = currentLang==='tr'?'Sil':'Delete';
+    const riskLabel = currentLang==='tr'?'risk':'risks';
+    return '<div data-hid="'+a.id+'" onclick="openHistoryItem('+a.id+')" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:13px;animation:cardIn .3s '+delay+'s ease forwards;opacity:0;transform:translateY(12px);cursor:pointer;transition:border-color .25s" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
+      +'<div style="width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,rgba(255,77,46,.18),rgba(255,140,66,.12));display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0">'+e+'</div>'
+      +'<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">'
+      +'<div style="font-weight:700;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.label+'</div>'
+      +'<button data-rid="'+a.id+'" onclick="event.stopPropagation();startRename('+a.id+')" title="'+renameTitle+'" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.75rem;padding:2px 4px;border-radius:4px;flex-shrink:0" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--muted)\'">✏️</button>'
+      +'</div><div style="font-size:.74rem;color:var(--muted)">'+a.date+' · '+a.time+'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0;margin-right:4px"><div style="font-size:.76rem;color:var(--accent);font-weight:600;margin-bottom:4px">'+a.risks+' '+riskLabel+'</div>'
+      +'<div style="height:5px;width:68px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:2px"><div style="height:100%;width:'+a.score+'%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px"></div></div>'
+      +'<div style="font-size:.68rem;color:var(--muted)">'+a.score+'/100</div></div>'
+      +'<button data-did="'+a.id+'" onclick="event.stopPropagation();deleteHistoryItem('+a.id+')" title="'+deleteTitle+'" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.88rem;padding:5px;border-radius:7px;flex-shrink:0" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--muted)\'">🗑</button>'
+      +'</div>';
+  }).join('');
+}
+
+
+const zone=document.getElementById('upload-zone');
+zone.addEventListener('dragover',e=>{e.preventDefault();zone.style.borderColor='var(--accent)';});
+zone.addEventListener('dragleave',()=>{zone.style.borderColor='var(--border)';});
+zone.addEventListener('drop',e=>{
+  e.preventDefault();zone.style.borderColor='var(--border)';
+  const file=e.dataTransfer.files[0];if(!file)return;
+  const r=new FileReader();r.onload=ev=>{const th=document.getElementById('preview-thumb');th.src=ev.target.result;th.style.display='block';};r.readAsDataURL(file);
+});
+
+// ── LANGUAGE DICT (simplified for space) ──
+function setLang(lang) {
+  currentLang = lang;
+  document.getElementById('btn-tr').classList.toggle('active',lang==='tr');
+  document.getElementById('btn-en').classList.toggle('active',lang==='en');
+  document.getElementById('lang-badge').textContent = lang==='tr'?'TR':'EN';
+  const isTR = lang==='tr';
+  const set = (id,v)=>{ const el=document.getElementById(id); if(el){ if(el.tagName==='INPUT'||el.tagName==='TEXTAREA') el.placeholder=v; else el.innerHTML=v; }};
+  set('auth-tagline', isTR?'Evini depreme hazırla. AI ile risk analizi yap.':'Prepare your home for earthquakes. AI risk analysis.');
+  set('tab-login',isTR?'Giriş Yap':'Sign In');set('tab-register',isTR?'Hesap Aç':'Sign Up');
+  set('btn-google',isTR?'Google ile devam et':'Continue with Google');
+  set('btn-apple',isTR?'Apple ile devam et':'Continue with Apple');
+  set('divider-or',isTR?'veya e-posta ile':'or continue with email');
+  set('auth-btn',isTR?'Giriş Yap':'Sign In');
+  set('ap-title-google',isTR?'🔵 Google Hesabı Seç':'🔵 Select Google Account');
+  set('ap-title-apple',isTR?'🍎 Apple Hesabı Seç':'🍎 Select Apple Account');
+  set('ap-add-google',isTR?'Başka hesap ekle':'Add another account');
+  set('ap-add-apple',isTR?'Başka hesap ekle':'Add another account');
+  set('auth-email-input',isTR?'E-posta adresin':'Email address');
+  set('auth-pass-input',isTR?'Şifre':'Password');
+  set('auth-pass2-input',isTR?'Şifreyi tekrar gir':'Confirm password');
+  set('auth-terms',isTR?'Devam ederek <a onclick="openModal(\'modal-terms\')">Kullanım Koşulları</a>\'nı ve <a onclick="openModal(\'modal-privacy\')">Gizlilik Politikası</a>\'nı kabul etmiş olursunuz.':'By continuing you agree to our <a onclick="openModal(\'modal-terms\')">Terms of Service</a> and <a onclick="openModal(\'modal-privacy\')">Privacy Policy</a>.');
+  set('welcome-tag',isTR?'Hoş geldin!':'Welcome!');
+  set('pricing-title',isTR?'Planını Seç':'Choose Your Plan');
+  set('pricing-sub',isTR?'İlk oda analizi tamamen ücretsiz.':'First room analysis is completely free.');
+  set('plan-free-name',isTR?'Ücretsiz':'Free');set('plan-free-period',isTR?'/ay':'/mo');set('plan-free-rooms',isTR?'1 oda analizi':'1 room analysis');
+  set('pf1',isTR?'Risk analizi':'Risk analysis');set('pf2',isTR?'Güvenli yerleşim görseli':'Safe layout visual');
+  set('pf3',isTR?'Saklanma alanı önerisi':'Shelter spot advice');set('pf4',isTR?'Deprem çantası listesi':'Earthquake bag list');
+  set('pf5',isTR?'PDF raporu yok':'No PDF report');set('btn-free',isTR?'Ücretsiz Başla':'Start Free');
+  set('popular-badge',isTR?'⭐ EN POPÜLER':'⭐ MOST POPULAR');
+  set('plan-pro-name','Pro');set('plan-pro-period',isTR?'/ay':'/mo');set('plan-pro-rooms',isTR?'5 oda analizi':'5 room analyses');
+  set('pp1',isTR?'Risk analizi':'Risk analysis');set('pp2',isTR?'Güvenli yerleşim görseli':'Safe layout visual');
+  set('pp3',isTR?'Saklanma alanı önerisi':'Shelter spot advice');set('pp4',isTR?'Deprem çantası listesi':'Earthquake bag list');
+  set('pp5',isTR?'PDF raporu':'PDF report');set('btn-pro',isTR?'Pro\'ya Geç':'Go Pro');
+  set('plan-max-name','Max');set('plan-max-period',isTR?'/ay':'/mo');set('plan-max-rooms',isTR?'10 oda analizi':'10 room analyses');
+  set('pm1',isTR?'Risk analizi':'Risk analysis');set('pm2',isTR?'Güvenli yerleşim görseli':'Safe layout visual');
+  set('pm3',isTR?'Saklanma alanı önerisi':'Shelter spot advice');set('pm4',isTR?'Deprem çantası listesi':'Earthquake bag list');
+  set('pm5',isTR?'PDF raporu + Öncelikli destek':'PDF report + Priority support');set('btn-max',isTR?'Max\'e Geç':'Go Max');
+  set('pay-lbl-card',isTR?'Kart Numarası':'Card Number');
+  set('pay-lbl-exp',isTR?'Son Kullanma':'Expiry Date');
+  set('pay-lbl-name',isTR?'Kart Üzerindeki Ad':'Name on Card');
+  set('pay-btn',isTR?'💳 Ödemeyi Tamamla':'💳 Complete Payment');
+  set('pay-secure-txt',isTR?'256-bit SSL ile güvende':'Secured with 256-bit SSL');
+  set('hero-tag-txt',isTR?'Yapay Zeka Destekli Deprem Güvenliği':'AI-Powered Earthquake Safety');
+  set('hero-title',isTR?'Odanın fotoğrafı,<br><span>depremdeki riski</span> gösterir.':'Your room photo<br>reveals <span>earthquake risks.</span>');
+  set('hero-sub',isTR?'Bir oda fotoğrafı yükle. AI tehlikeleri görselleştirsin ve güvenli yerleşim önersin.':'Upload a room photo. Let AI visualize dangers and suggest a safer layout.');
+  set('upload-title',isTR?'Oda fotoğrafını buraya sürükle':'Drag your room photo here');
+  set('upload-sub',isTR?'veya tıklayarak dosya seç · JPG, PNG · Maks 10MB':'or click to select · JPG, PNG · Max 10MB');
+  set('r-salon',isTR?'🛋️ Salon':'🛋️ Living Room');set('r-yatak',isTR?'🛏️ Yatak Odası':'🛏️ Bedroom');
+  set('r-mutfak',isTR?'🍳 Mutfak':'🍳 Kitchen');set('r-cocuk',isTR?'🧸 Çocuk Odası':'🧸 Children\'s Room');
+  set('btn-analyze',isTR?'🔍 Deprem Riskini Analiz Et':'🔍 Analyze Earthquake Risk');
+  set('upgrade-link',isTR?'Yükselt →':'Upgrade →');
+  set('loading-title',isTR?'Oda analiz ediliyor...':'Analyzing room...');
+  set('loading-sub',isTR?'Bu işlem birkaç saniye sürebilir':'This may take a few seconds');
+  set('s1',isTR?'Oda düzeni tespit ediliyor':'Detecting room layout');
+  set('s2',isTR?'Risk noktaları belirleniyor':'Identifying risk points');
+  set('s3',isTR?'Deprem senaryosu üretiliyor':'Generating earthquake scenario');
+  set('s4',isTR?'Güvenli yerleşim oluşturuluyor':'Creating safe layout');
+  set('res-title',isTR?'Analizin Tamamlandı':'Analysis Complete');
+  set('res-badge',isTR?'🔴 Yüksek Risk — 5 tehlike noktası':'🔴 High Risk — 5 danger points');
+  set('st1',isTR?' Risk noktası':' Risk points');set('st2',isTR?' Kritik tehlike':' Critical dangers');set('st3',isTR?' Risk düşürme potansiyeli':' Risk reduction potential');
+  set('demo-txt',isTR?'<strong>Demo Modu</strong> — Görseller örnek içeriklerdir.':'<strong>Demo Mode</strong> — Images are samples.');
+  set('pos-title',isTR?'Deprem Anında Doğru Pozisyon':'Correct Position During Earthquake');
+  set('pos-sub',isTR?'Sarsıntı başladığında bu 3 adımı uygula: Çök — Kapan — Tutun':'When shaking starts, follow these 3 steps: Drop — Cover — Hold On');
+  set('pos-step1',isTR?'1. ADIM':'STEP 1');set('pos-name1',isTR?'ÇÖK':'DROP');
+  set('pos-desc1',isTR?'Sarsıntı başlar başlamaz hemen yere çök. Diz ve ellerinin üzerine in.':'Drop to the ground immediately. Get on hands and knees.');
+  set('pos-tip1',isTR?'💡 Ellerini ve dizlerini yere daya, sağlam bir pozisyon al.':'💡 Place hands and knees on the floor, find a stable position.');
+  set('pos-step2',isTR?'2. ADIM':'STEP 2');set('pos-name2',isTR?'KAPAN':'COVER');
+  set('pos-desc2',isTR?'Sağlam bir masanın altına gir. Masa yoksa kollarınla kafanı koru.':'Get under a sturdy table. If no table, cover head with arms.');
+  set('pos-tip2',isTR?'💡 Kollarını kafanın iki yanına al, başını iki kolun arasına göm.':'💡 Put arms on either side of head, tuck head between arms.');
+  set('pos-step3',isTR?'3. ADIM':'STEP 3');set('pos-name3',isTR?'TUTUN':'HOLD ON');
+  set('pos-desc3',isTR?'Masa ayağını sıkıca tut. Sarsıntı tamamen bitene kadar kımıldama.':'Hold on to the table leg. Don\'t move until shaking stops.');
+  set('pos-tip3',isTR?'💡 Sarsıntı genellikle 20-60 saniye sürer. Tamamen bitene kadar bırakma.':'💡 Shaking usually lasts 20-60 seconds. Don\'t release until it fully stops.');
+  set('bag-title',isTR?'Deprem Çantanda Neler Olmalı?':'What Should Be in Your Emergency Bag?');
+  set('bag-sub',isTR?'AFAD ve Kızılay önerilerine göre kapsamlı liste':'Based on FEMA and Red Cross guidelines');
+  set('comp-title',isTR?'Görsel Karşılaştırma':'Visual Comparison');
+  set('check-title',isTR?'Yapman Gerekenler':'Action Items');
+  set('btn-back',isTR?'Yeni Oda Analiz Et':'Analyze New Room');
+  set('btn-pdf',isTR?'PDF Raporu İndir':'Download PDF Report');
+  set('chat-title',isTR?'QuakeReady AI':'QuakeReady AI');
+  set('chat-status',isTR?'● Çevrimiçi':'● Online');
+  set('disclaimer-text',isTR?'<strong>Yapay Zeka Uyarısı:</strong> Risk analizleri genel güvenlik ilkelerine dayanmakta olup <strong>%100 doğruluk garantisi verilmez.</strong> Sonuçlar yalnızca bilgilendirme amaçlıdır.':'<strong>AI Disclaimer:</strong> Risk analyses are based on general safety principles and <strong>100% accuracy is not guaranteed.</strong> Results are for informational purposes only.');
+  const sug = document.getElementById('chat-suggestions');
+    if(sug){ sug.innerHTML = isTR
+    ? '<div class="chat-sug" onclick="sendSuggestion(this)">Hangi dolap daha güvenli?</div><div class="chat-sug" onclick="sendSuggestion(this)">Depremde nerede saklanmalıyım?</div><div class="chat-sug" onclick="sendSuggestion(this)">TV sabitleme nasıl yapılır?</div>'
+    : '<div class="chat-sug" onclick="sendSuggestion(this)">Which cabinet is safer?</div><div class="chat-sug" onclick="sendSuggestion(this)">Where to shelter?</div><div class="chat-sug" onclick="sendSuggestion(this)">How to secure a TV?</div>'; }
+  const inp2 = document.getElementById('chat-input');
+  if(inp2) inp2.placeholder = isTR ? 'Deprem veya oda güvenliği hakkında sor...' : 'Ask about earthquake or room safety...';
+  updateUsageBar();
+  updateAccountUI();
+  showToast(lang==='tr' ? '🇹🇷 Türkçe seçildi' : '🇬🇧 English selected');
+}
+</script>
+</body>
+</html>
