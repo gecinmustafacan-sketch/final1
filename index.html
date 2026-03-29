@@ -876,20 +876,19 @@ h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-
 </div>
 
 <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
-
 // ── API CONFIG ──
-const GEMINI_MODELS = ['gemini-2.5-flash'];
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash-latest'];
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const STORAGE_KEYS = { gemini:'qr_gemini_key', fal:'qr_fal_key' };
 const appSecrets = {
- gemini: 'AIzaSyCQ_KsBoAsCFMSJ9hQCktr-TrDdVsMtXUo',
+  gemini: 'AIzaSyCQ_KsBoAsCFMSJ9hQCktr-TrDdVsMtXUo',
   fal: '44b2f216-8945-4023-8584-e8f1df87fd5a:5ca9ecab44dad30d5446d6d7697fdb98'
 };
 const appState = {
   latestAnalysis: null,
   originalImageDataUrl: null
 };
-
+ 
 function sanitizeApiKey(v) {
   return String(v || '').trim();
 }
@@ -907,17 +906,16 @@ async function ensureApiKeys(mode = 'all') {
   const needGemini = mode === 'all' || mode === 'gemini';
   const needFal = mode === 'all' || mode === 'fal';
   let changed = false;
-
   if (needGemini && !appSecrets.gemini) {
     const val = prompt(currentLang === 'tr'
-      ? 'AIzaSyBzPegsHn7MCbZvbJQVa_8lMrx7eP5ZRHQ key yapıştır. Bir kez kaydedilecek ve bu tarayıcıda saklanacak.'
-      : 'Paste your AIzaSyBzPegsHn7MCbZvbJQVa_8lMrx7eP5ZRHQ. It will be saved in this browser.');
+      ? 'Gemini API key yapıştır.'
+      : 'Paste your Gemini API key.');
     if (val) { appSecrets.gemini = sanitizeApiKey(val); changed = true; }
   }
   if (needFal && !appSecrets.fal) {
     const val = prompt(currentLang === 'tr'
-      ? 'fal.ai API key yapıştır. Bir kez kaydedilecek ve bu tarayıcıda saklanacak.'
-      : 'Paste your fal.ai API key. It will be saved in this browser.');
+      ? 'fal.ai API key yapıştır.'
+      : 'Paste your fal.ai API key.');
     if (val) { appSecrets.fal = sanitizeApiKey(val); changed = true; }
   }
   if (changed) saveApiKeys(appSecrets.gemini, appSecrets.fal);
@@ -931,7 +929,7 @@ window.setApiKeys = async function () {
   await ensureApiKeys('all');
   showToast(currentLang === 'tr' ? '🔑 API anahtarları güncellendi.' : '🔑 API keys updated.');
 };
-
+ 
 // ── STATE ──
 let currentLang = 'tr';
 let selectedQuality = 'dev';
@@ -943,71 +941,88 @@ let pendingPlan = null;
 let chatHistory = [];
 let chatOpen = false;
 let loggedInUser = null;
-
-async function geminiRequest({ prompt, imageBase64 = null, imageMime = null, jsonSchema = null, temperature = 0.35, maxOutputTokens = 1400 }) {
+ 
+// ── GEMINI API (FIXED: query param + correct models) ──
+async function geminiRequest({ prompt, imageBase64 = null, imageMime = null, temperature = 0.35, maxOutputTokens = 1400 }) {
   const ok = await ensureApiKeys('gemini');
   if (!ok) return null;
-
+ 
   const parts = [];
   if (imageBase64 && imageMime) {
     parts.push({ inline_data: { mime_type: imageMime, data: imageBase64 } });
   }
   parts.push({ text: prompt });
-
+ 
   for (const model of GEMINI_MODELS) {
     try {
-      const res = await fetch(`${GEMINI_API_BASE}/${model}:generateContent`, {
+      console.log('[QR] Gemini request to', model, 'prompt length:', prompt.length);
+      // FIX: API key as query parameter (more reliable from browser)
+      const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${encodeURIComponent(appSecrets.gemini)}`;
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': appSecrets.gemini
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts }],
-          generationConfig: {
-            temperature,
-            maxOutputTokens,
-            ...(jsonSchema ? {
-              responseMimeType: 'application/json',
-              responseSchema: jsonSchema
-            } : {})
-          }
+          generationConfig: { temperature, maxOutputTokens }
         })
       });
-
+ 
       if (!res.ok) {
-        console.error('Gemini HTTP', model, res.status, await res.text());
-        continue;
+        const errBody = await res.text();
+        console.error('[QR] Gemini HTTP ERROR', model, res.status, errBody.slice(0, 300));
+        continue; // try next model
       }
-
+ 
       const data = await res.json();
       if (data.error) {
-        console.error('Gemini API error', model, data.error);
+        console.error('[QR] Gemini API error', model, data.error);
         continue;
       }
-
+ 
       const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('').trim();
+      console.log('[QR] Gemini OK from', model, 'length:', text?.length);
       if (text) return text;
     } catch (err) {
-      console.error('geminiRequest error:', model, err);
+      console.error('[QR] geminiRequest error:', model, err);
     }
   }
+  console.error('[QR] All Gemini models failed');
   return null;
 }
+ 
 async function geminiText(prompt, imageBase64 = null, imageMime = null, opts = {}) {
   return geminiRequest({ prompt, imageBase64, imageMime, ...opts });
 }
+ 
+// FIX: JSON extraction without responseSchema (prompt-based)
 async function geminiJson(prompt, schema, imageBase64 = null, imageMime = null, opts = {}) {
-  const raw = await geminiRequest({ prompt, imageBase64, imageMime, jsonSchema: schema, ...opts });
-  if (!raw) return null;
+  const jsonPrompt = prompt + '\n\nCRITICAL: Return ONLY valid JSON. No markdown backticks, no explanation, no extra text. Start with { and end with }';
+  const raw = await geminiRequest({ prompt: jsonPrompt, imageBase64, imageMime, ...opts });
+  if (!raw) {
+    console.error('[QR] geminiJson: Gemini returned null');
+    return null;
+  }
   try {
-    return JSON.parse(raw);
+    let cleaned = raw;
+    if (cleaned.includes('```')) {
+      cleaned = cleaned.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    }
+    cleaned = cleaned.trim();
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+    }
+    const parsed = JSON.parse(cleaned);
+    console.log('[QR] geminiJson parsed OK, keys:', Object.keys(parsed));
+    return parsed;
   } catch (err) {
-    console.error('geminiJson parse error:', err, raw);
+    console.error('[QR] geminiJson parse error:', err.message, 'raw:', raw?.slice(0, 300));
     return null;
   }
 }
-
+ 
+// ── FAL.AI ──
 async function falGenerate(prompt, quality = 'dev') {
   const ok = await ensureApiKeys('fal');
   if (!ok) return null;
@@ -1016,7 +1031,6 @@ async function falGenerate(prompt, quality = 'dev') {
     console.error('fal client not loaded');
     return null;
   }
-
   fal.config({ credentials: appSecrets.fal });
   const endpoint = quality === 'schnell' ? 'fal-ai/flux/schnell' : 'fal-ai/flux/dev';
   const promptSuffix = quality === 'pro'
@@ -1024,7 +1038,6 @@ async function falGenerate(prompt, quality = 'dev') {
     : quality === 'dev'
       ? ', realistic interior photography, coherent room layout'
       : ', realistic room photo';
-
   try {
     const result = await fal.subscribe(endpoint, {
       input: { prompt: `${prompt}${promptSuffix}` }
@@ -1035,9 +1048,8 @@ async function falGenerate(prompt, quality = 'dev') {
     return null;
   }
 }
-
+ 
 // ── HELPERS ──
-
 function getUploadedFile() {
   return document.getElementById('file-input')?.files?.[0] || null;
 }
@@ -1057,14 +1069,12 @@ function fileToDataUrl(file) {
     r.readAsDataURL(file);
   });
 }
-
-// ── PASSWORD EYE ──
 function togglePass(inputId, eyeEl) {
   const inp = document.getElementById(inputId);
   if (inp.type === 'password') { inp.type = 'text'; eyeEl.textContent = '🙈'; }
   else { inp.type = 'password'; eyeEl.textContent = '👁'; }
 }
-
+ 
 // ── AUTH ──
 function switchAuthTab(tab) {
   authTabState = tab;
@@ -1091,7 +1101,7 @@ function doAuth() {
   showToast(currentLang==='tr'?'✅ Giriş başarılı!':'✅ Signed in!');
   setTimeout(()=>showScreen('screen-pricing'), 700);
 }
-
+ 
 // ── PRICING ──
 function selectPlan(plan) {
   userPlan = plan;
@@ -1126,7 +1136,7 @@ function completePayment(){
   btn.disabled=true;
   setTimeout(()=>{closeModal('modal-payment');btn.textContent=currentLang==='tr'?'💳 Ödemeyi Tamamla':'💳 Complete Payment';btn.disabled=false;selectPlan(pendingPlan);},1800);
 }
-
+ 
 // ── UPLOAD ──
 function updateUsageBar(){
   const pct=(roomsUsed/roomLimit)*100;
@@ -1135,7 +1145,6 @@ function updateUsageBar(){
     ?`Kullanım: ${roomsUsed}/${roomLimit} oda`
     :`Usage: ${roomsUsed}/${roomLimit} room${roomLimit>1?'s':''}`;
 }
-
 function handleFileSelect(e){
   const file=e?.target?.files?.[0];
   if(!file) return;
@@ -1157,7 +1166,6 @@ function handleFileSelect(e){
   };
   r.readAsDataURL(file);
 }
-
 function selectRoom(btn){
   document.querySelectorAll('.room-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
@@ -1167,121 +1175,58 @@ function setQuality(q,btn){
   document.querySelectorAll('#q-schnell,#q-dev,#q-pro').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
 }
-
-
-// ── ANALYSIS: GEMINI VISION → structured room analysis ──
-const ANALYSIS_SCHEMA = {
-  type: 'object',
-  properties: {
-    summary: { type: 'string' },
-    roomDesc: { type: 'string' },
-    riskImagePrompt: { type: 'string' },
-    safeImagePrompt: { type: 'string' },
-    risks: {
-      type: 'array',
-     
-      items: {
-        type: 'object',
-        properties: {
-          icon: { type: 'string' },
-          title: { type: 'string' },
-          desc: { type: 'string' },
-          severity: { type: 'string', enum: ['high', 'medium'] }
-        },
-        required: ['icon', 'title', 'desc', 'severity']
-      }
-    },
-    checklist: {
-      type: 'array',
-     
-      items: {
-        type: 'object',
-        properties: {
-          text: { type: 'string' },
-          priority: { type: 'string', enum: ['high', 'medium'] }
-        },
-        required: ['text', 'priority']
-      }
-    },
-    shelter: {
-      type: 'object',
-      properties: {
-        best: { type: 'string' },
-        bestDesc: { type: 'string' },
-        second: { type: 'string' },
-        secondDesc: { type: 'string' },
-        third: { type: 'string' },
-        thirdDesc: { type: 'string' },
-        avoid: { type: 'array', items: { type: 'string' } }
-      },
-      required: ['best', 'bestDesc', 'second', 'secondDesc', 'third', 'thirdDesc', 'avoid']
-    },
-    riskMarkers: {
-      type: 'array',
-    
-      items: {
-        type: 'object',
-        properties: {
-          label: { type: 'string' },
-          x: { type: 'number' },
-          y: { type: 'number' }
-        },
-        required: ['label', 'x', 'y']
-      }
-    },
-    safeMarkers: {
-      type: 'array',
-     
-      items: {
-        type: 'object',
-        properties: {
-          label: { type: 'string' },
-          x: { type: 'number' },
-          y: { type: 'number' }
-        },
-        required: ['label', 'x', 'y']
-      }
-    }
-  },
-  required: ['summary', 'roomDesc', 'riskImagePrompt', 'safeImagePrompt', 'risks', 'checklist', 'shelter', 'riskMarkers', 'safeMarkers']
-};
-
+ 
+// ── ANALYSIS: GEMINI VISION (FIXED: no responseSchema, prompt-based JSON) ──
 async function analyzeRoomWithGemini(roomId, b64, mime) {
   const isTR = currentLang === 'tr';
   const roomLabelTR = {salon:'salon',yatak:'yatak odası',mutfak:'mutfak',cocuk:'çocuk odası'};
   const roomLabelEN = {salon:'living room',yatak:'bedroom',mutfak:'kitchen',cocuk:"children's room"};
   const rl = isTR ? (roomLabelTR[roomId]||'oda') : (roomLabelEN[roomId]||'room');
-
+ 
   const prompt = isTR
-    ? `Sen QuakeReady için deprem güvenliği uzmanısın. Kullanıcı bir ${rl} fotoğrafı yükledi.
-Görevin:
-1) Fotoğraftaki gerçek eşyalara dayanarak 5 somut risk çıkar.
-2) Kısa, doğal Türkçe yaz.
-3) Saklanma alanını odaya göre öner.
-4) Görsel üzeri etiketler için yaklaşık konum ver. x ve y değerleri yüzde gibi düşünülmeli ve 8 ile 92 arasında olmalı.
-5) riskImagePrompt ve safeImagePrompt alanlarını İNGİLİZCE yaz; fal.ai görsel üretecek.
-6) riskImagePrompt mevcut odanın düzenini koruyup deprem anında neyin devrildiğini anlatsın.
-7) safeImagePrompt aynı odayı daha güvenli yerleşimle anlatsın.
-8) summary alanı 1 cümle olsun.
-Sadece JSON döndür.`
+    ? `Sen QuakeReady icin deprem guvenligi uzmanisin. Kullanici bir ${rl} fotografi yukledi.
+Gorevin:
+1) Fotograftaki gercek esyalara dayanarak 5 somut deprem riski cikar.
+2) Kisa, dogal Turkce yaz.
+3) Saklanma alanini odaya gore oner.
+4) Gorsel uzeri etiketler icin yaklasik konum ver. x ve y degerleri 8 ile 92 arasinda olmali.
+5) riskImagePrompt ve safeImagePrompt alanlarini INGILIZCE yaz; fal.ai gorsel uretecek.
+6) riskImagePrompt mevcut odanin duzenini koruyup deprem aninda neyin devrildigini anlatsin.
+7) safeImagePrompt ayni odayi daha guvenli yerlesimle anlatsin.
+8) summary alani 1 cumle olsun.
+ 
+Asagidaki JSON formatinda SADECE JSON dondur (baska hicbir sey yazma):
+{
+  "summary": "...",
+  "roomDesc": "...",
+  "riskImagePrompt": "...",
+  "safeImagePrompt": "...",
+  "risks": [{"icon":"emoji","title":"...","desc":"...","severity":"high veya medium"}],
+  "checklist": [{"text":"...","priority":"high veya medium"}],
+  "shelter": {"best":"...","bestDesc":"...","second":"...","secondDesc":"...","third":"...","thirdDesc":"...","avoid":["...","...","...","..."]},
+  "riskMarkers": [{"label":"...","x":30,"y":40}],
+  "safeMarkers": [{"label":"...","x":30,"y":40}]
+}`
     : `You are the QuakeReady earthquake safety expert. The user uploaded a ${rl} photo.
-Tasks:
-1) Extract 5 concrete earthquake risks grounded in the actual room.
-2) Keep every field short and practical.
-3) Suggest the safest shelter spot for this room.
-4) Provide approximate overlay positions; x and y should be between 8 and 92.
-5) Write riskImagePrompt and safeImagePrompt in English for fal.ai image generation.
-6) Make riskImagePrompt preserve the room layout and describe how the room looks during strong shaking.
-7) Make safeImagePrompt preserve the same room and show a safer rearranged version.
-8) summary must be a single sentence.
-Return JSON only.`;
-
-  return geminiJson(prompt, ANALYSIS_SCHEMA, b64, mime, { temperature: 0.2, maxOutputTokens: 1600 });
+Extract 5 concrete earthquake risks from the actual items in the photo.
+Return ONLY this JSON format (nothing else):
+{
+  "summary": "one sentence",
+  "roomDesc": "brief room description",
+  "riskImagePrompt": "English prompt for fal.ai showing this room during earthquake",
+  "safeImagePrompt": "English prompt for fal.ai showing this room safely rearranged",
+  "risks": [{"icon":"emoji","title":"...","desc":"...","severity":"high or medium"}],
+  "checklist": [{"text":"...","priority":"high or medium"}],
+  "shelter": {"best":"...","bestDesc":"...","second":"...","secondDesc":"...","third":"...","thirdDesc":"...","avoid":["...","...","...","..."]},
+  "riskMarkers": [{"label":"...","x":30,"y":40}],
+  "safeMarkers": [{"label":"...","x":30,"y":40}]
+}`;
+ 
+  console.log('[QR] Analyzing room:', roomId, 'image size:', b64?.length);
+  return geminiJson(prompt, null, b64, mime, { temperature: 0.2, maxOutputTokens: 2000 });
 }
-
+ 
 // ── APPLY ANALYSIS TO DOM ──
-
-
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, Number.isFinite(+n) ? +n : min));
 }
@@ -1295,46 +1240,37 @@ function applyMarker(el, marker, prefix) {
   el.style.transform = 'translate(-50%, -50%)';
   el.textContent = `${prefix} ${marker.label}`;
 }
-function hideMarker(el) {
-  if (!el) return;
-  el.style.display = 'none';
-}
+function hideMarker(el) { if (!el) return; el.style.display = 'none'; }
 function renderComparisonMarkers(riskMarkers = [], safeMarkers = []) {
   const riskEls = Array.from(document.querySelectorAll('.risk-marker'));
   const safeEls = Array.from(document.querySelectorAll('.safe-marker'));
   riskEls.forEach((el, i) => riskMarkers[i] ? applyMarker(el, riskMarkers[i], '⚠️') : hideMarker(el));
   safeEls.forEach((el, i) => safeMarkers[i] ? applyMarker(el, safeMarkers[i], '✅') : hideMarker(el));
 }
-
+ 
 function applyAnalysisToDOM(roomId, aiData) {
   const isTR = currentLang === 'tr';
-
-  const fallback = {
-    salon:{ risks:[
+  const fb = {
+    risks:[
       {icon:'🗄️',t:'Sabitlenmemiş Dolap',d:'Devrilme riski yüksek.',s:'high'},
       {icon:'📺',t:'TV Sabitleme Eksik',d:'Depremde fırlayabilir.',s:'high'},
       {icon:'🪑',t:'Kanepe Pencere Önü',d:'Cam kırılması riski.',s:'high'},
       {icon:'🕯️',t:'Dekoratif Objeler',d:'Raf üstünden düşebilir.',s:'medium'},
       {icon:'🚪',t:'Kaçış Yolu',d:'Çıkış daraltılmış olabilir.',s:'medium'}],
-      checklist:[
-        {t:'Dolabı L braketi ile duvara sabitle',p:'high'},
-        {t:'TV için anti-tip kayış kullan',p:'high'},
-        {t:'Kanepeni pencereden uzaklaştır',p:'high'},
-        {t:'Üst raftaki ağır objeleri indir',p:'medium'},
-        {t:'Kapı önünü boşalt',p:'medium'}],
-      shelter:{best:isTR?'Sağlam iç duvar yanı':'Inner wall',bestDesc:isTR?'Pencereden uzak, çökmek için uygun.':'Away from windows, suitable for drop-cover-hold.',second:isTR?'Kanepenin yanı':'Beside sofa',secondDesc:isTR?'Yanına çök, üstüne değil.':'Drop beside it, not under it.',third:isTR?'İç koridor':'Inner corridor',thirdDesc:isTR?'Sarsıntı durunca kontrollü geç.':'Move only after shaking slows.',avoid:[isTR?'Pencere önü':'Window area',isTR?'Büyük dolap yanı':'Tall cabinet side',isTR?'TV önü':'TV zone',isTR?'Kapı eşiği':'Door frame']},
-      riskMarkers:[{label:isTR?'Dolap devrilebilir':'Cabinet can fall',x:28,y:28},{label:isTR?'TV fırlayabilir':'TV can fly off',x:78,y:55},{label:isTR?'Çıkış daralır':'Exit narrows',x:40,y:80}],
-      safeMarkers:[{label:isTR?'Sabitlendi':'Anchored',x:28,y:28},{label:isTR?'TV sabitlendi':'TV secured',x:78,y:55},{label:isTR?'Kaçış açık':'Clear exit',x:40,y:80}],
-      summary:isTR?'Bu oda birkaç sabitleme ve yer değişikliği ile çok daha güvenli hale gelir.':'This room becomes much safer with anchoring and layout changes.'
-    }
+    checklist:[
+      {t:'Dolabı L braketi ile duvara sabitle',p:'high'},
+      {t:'TV için anti-tip kayış kullan',p:'high'},
+      {t:'Kanepeni pencereden uzaklaştır',p:'high'},
+      {t:'Üst raftaki ağır objeleri indir',p:'medium'},
+      {t:'Kapı önünü boşalt',p:'medium'}],
+    shelter:{best:isTR?'Sağlam iç duvar yanı':'Inner wall',bestDesc:isTR?'Pencereden uzak, çökmek için uygun.':'Away from windows.',second:isTR?'Kanepenin yanı':'Beside sofa',secondDesc:isTR?'Yanına çök, üstüne değil.':'Drop beside it.',third:isTR?'İç koridor':'Inner corridor',thirdDesc:isTR?'Sarsıntı durunca kontrollü geç.':'Move after shaking stops.',avoid:[isTR?'Pencere önü':'Window area',isTR?'Büyük dolap yanı':'Tall cabinet',isTR?'TV önü':'TV zone',isTR?'Kapı eşiği':'Door frame']},
+    riskMarkers:[{label:isTR?'Dolap devrilebilir':'Cabinet can fall',x:28,y:28},{label:isTR?'TV fırlayabilir':'TV can fly off',x:78,y:55},{label:isTR?'Çıkış daralır':'Exit narrows',x:40,y:80}],
+    safeMarkers:[{label:isTR?'Sabitlendi':'Anchored',x:28,y:28},{label:isTR?'TV sabitlendi':'TV secured',x:78,y:55},{label:isTR?'Kaçış açık':'Clear exit',x:40,y:80}],
+    summary:isTR?'Bu oda birkaç sabitleme ile çok daha güvenli hale gelir.':'This room becomes much safer with anchoring.'
   };
-
-  const fb = fallback[roomId] || fallback.salon;
+ 
   const risks = (aiData?.risks || []).map(r => ({
-    icon: r.icon || '⚠️',
-    t: r.title || r.t || '',
-    d: r.desc || r.d || '',
-    s: r.severity || r.s || 'medium'
+    icon: r.icon || '⚠️', t: r.title || r.t || '', d: r.desc || r.d || '', s: r.severity || r.s || 'medium'
   }));
   const checklist = (aiData?.checklist || []).map(c => ({ t: c.text || c.t || '', p: c.priority || c.p || 'medium' }));
   const shelter = aiData?.shelter || fb.shelter;
@@ -1351,20 +1287,20 @@ function applyAnalysisToDOM(roomId, aiData) {
     safeMarkers: Array.isArray(aiData?.safeMarkers) && aiData.safeMarkers.length ? aiData.safeMarkers.slice(0,3) : fb.safeMarkers
   };
   appState.latestAnalysis = normalized;
-
+ 
   const critCount = normalized.risks.filter(r=>r.s==='high').length;
   const badge = document.getElementById('res-badge');
   if (badge) badge.textContent = isTR
     ? `🔴 ${critCount >= 3 ? 'Yüksek Risk' : 'Orta Risk'} — ${normalized.risks.length} tehlike noktası`
     : `🔴 ${critCount >= 3 ? 'High Risk' : 'Medium Risk'} — ${normalized.risks.length} danger points`;
-
+ 
   try {
     const nums = document.querySelectorAll('.stat-chip strong');
     if (nums[0]) nums[0].textContent = normalized.risks.length;
     if (nums[1]) nums[1].textContent = critCount;
     if (nums[2]) nums[2].textContent = '%' + Math.min(95, 58 + critCount * 9);
   } catch(e){}
-
+ 
   normalized.risks.forEach((r,i)=>{
     const ti=document.getElementById(`r${i+1}t`); if(ti) ti.textContent=r.t;
     const di=document.getElementById(`r${i+1}d`); if(di) di.textContent=r.d;
@@ -1372,50 +1308,42 @@ function applyAnalysisToDOM(roomId, aiData) {
     if(si){si.textContent=r.s==='high'?(isTR?'Kritik':'Critical'):(isTR?'Orta':'Medium');si.className=`severity ${r.s==='high'?'sev-high':'sev-med'}`;}
     const icon=document.querySelectorAll('.risk-icon-wrap')[i]; if(icon) icon.textContent=r.icon||'⚠️';
   });
-
+ 
   normalized.checklist.forEach((c,i)=>{
     const ct=document.getElementById(`c${i+1}`); if(ct) ct.textContent=c.t;
     const cp=document.getElementById(`c${i+1}p`);
     if(cp){cp.textContent=c.p==='high'?(isTR?'Kritik':'Critical'):(isTR?'Orta':'Medium');cp.className=`check-priority ${c.p==='high'?'pri-high':'pri-med'}`;}
   });
-
-  const setText = (selector, value) => { const el = document.querySelector(selector); if (el) el.textContent = value; };
-  setText('.shelter-best h4', shelter.best || fb.shelter.best);
-  setText('.shelter-best p', shelter.bestDesc || fb.shelter.bestDesc);
+ 
   const spot2t = document.getElementById('spot2t'); if (spot2t) spot2t.textContent = shelter.second || fb.shelter.second;
   const spot2d = document.getElementById('spot2d'); if (spot2d) spot2d.textContent = shelter.secondDesc || fb.shelter.secondDesc;
   const spot3t = document.getElementById('spot3t'); if (spot3t) spot3t.textContent = shelter.third || fb.shelter.third;
   const spot3d = document.getElementById('spot3d'); if (spot3d) spot3d.textContent = shelter.thirdDesc || fb.shelter.thirdDesc;
   const avoidItems=document.querySelectorAll('.spot-dont li');
   (shelter.avoid || fb.shelter.avoid).slice(0,4).forEach((a,i)=>{ if(avoidItems[i]) avoidItems[i].textContent=a; });
-
   renderComparisonMarkers(normalized.riskMarkers, normalized.safeMarkers);
-
+ 
   const demoBanner = document.getElementById('demo-txt');
   if (demoBanner) demoBanner.innerHTML = aiData
-    ? (isTR
-        ? '<strong>Canlı AI</strong> — Metinler ve işaretler yüklediğin fotoğrafa göre üretildi.'
-        : '<strong>Live AI</strong> — Text and markers were generated from your uploaded photo.')
-    : (isTR
-        ? '<strong>Demo Modu</strong> — API yanıtı alınamadı; güvenli demo içeriği gösteriliyor.'
-        : '<strong>Demo Mode</strong> — API response unavailable; showing safe fallback content.');
+    ? (isTR ? '<strong>Canlı AI</strong> — Metinler ve işaretler yüklediğin fotoğrafa göre üretildi.'
+            : '<strong>Live AI</strong> — Text and markers were generated from your uploaded photo.')
+    : (isTR ? '<strong>Demo Modu</strong> — API yanıtı alınamadı; güvenli demo içeriği gösteriliyor.'
+            : '<strong>Demo Mode</strong> — API response unavailable; showing safe fallback content.');
   const descOrig = document.getElementById('desc-orig'); if (descOrig) descOrig.textContent = normalized.summary || (isTR?'Yüklenen oda fotoğrafı analiz edildi.':'Uploaded room photo was analyzed.');
   const descRisk = document.getElementById('desc-risk'); if (descRisk) descRisk.textContent = isTR ? 'Bu görsel deprem sırasında odanın nasıl riskli hale gelebileceğini gösterir.' : 'This image shows how the room may become dangerous during strong shaking.';
   const descSafe = document.getElementById('desc-safe'); if (descSafe) descSafe.textContent = isTR ? 'Bu görsel aynı odanın daha güvenli düzenlenmiş halini gösterir.' : 'This image shows a safer arrangement of the same room.';
-
+ 
   showToast(aiData
     ? (isTR?'🤖 AI odanı fotoğrafa göre analiz etti!':'🤖 AI analyzed your room from the photo!')
     : (isTR?'🧪 Demo içeriği gösteriliyor.':'🧪 Showing demo content.'));
 }
-
+ 
 // ── GENERATE IMAGES WITH FAL.AI ──
-
-
 async function generateImages(roomLabel) {
   const file = getUploadedFile();
   const imgs = document.querySelectorAll('.comp-img-wrap img');
   const analysis = appState.latestAnalysis;
-
+ 
   if (file) {
     const dataUrl = await fileToDataUrl(file);
     appState.originalImageDataUrl = dataUrl;
@@ -1424,40 +1352,31 @@ async function generateImages(roomLabel) {
     imgs[0].src = appState.originalImageDataUrl;
     imgs[0].style.cssText = '';
   }
-
+ 
   const baseDesc = analysis?.roomDesc || roomLabel || 'living room';
   const riskPrompt = analysis?.riskImagePrompt || `${baseDesc}. Same room during a strong earthquake, furniture tipping, objects falling, debris, realistic interior photo.`;
   const safePrompt = analysis?.safeImagePrompt || `${baseDesc}. Same room rearranged for earthquake safety, anchored furniture, clear pathway, realistic interior photo.`;
-
+ 
   try {
     const [riskUrl, safeUrl] = await Promise.all([
       falGenerate(riskPrompt, selectedQuality),
       falGenerate(safePrompt, selectedQuality === 'schnell' ? 'dev' : selectedQuality)
     ]);
-
     if (riskUrl && imgs[1]) { imgs[1].src = riskUrl; imgs[1].style.cssText = ''; }
     else if (imgs[1] && appState.originalImageDataUrl) {
       imgs[1].src = appState.originalImageDataUrl;
       imgs[1].style.cssText = 'filter:saturate(.35) brightness(.55) contrast(1.2) sepia(.2);';
     }
-
     if (safeUrl && imgs[2]) { imgs[2].src = safeUrl; imgs[2].style.cssText = ''; }
     else if (imgs[2] && appState.originalImageDataUrl) {
       imgs[2].src = appState.originalImageDataUrl;
       imgs[2].style.cssText = 'filter:saturate(1.12) brightness(1.02) hue-rotate(10deg);';
     }
-
-    if (riskUrl || safeUrl) {
-      showToast(currentLang==='tr'?'🎨 AI görselleri hazır!':'🎨 AI images ready!');
-    }
-  } catch(err) {
-    console.error('generateImages error:', err);
-  }
+    if (riskUrl || safeUrl) showToast(currentLang==='tr'?'🎨 AI görselleri hazır!':'🎨 AI images ready!');
+  } catch(err) { console.error('generateImages error:', err); }
 }
-
+ 
 // ── START ANALYSIS ──
-
-
 function startAnalysis() {
   if (roomsUsed>=roomLimit) {
     showToast(currentLang==='tr'?'❌ Limit doldu! Planını yükselt.':'❌ Limit reached! Upgrade plan.');
@@ -1465,7 +1384,7 @@ function startAnalysis() {
   }
   roomsUsed++; updateUsageBar();
   showScreen('screen-loading');
-
+ 
   const steps=['step-1','step-2','step-3','step-4']; let i=0;
   const activeRoom = document.querySelector('.room-btn.active:not(#q-schnell):not(#q-dev):not(#q-pro)');
   const roomId = activeRoom ? activeRoom.id.replace('r-','') : 'salon';
@@ -1473,14 +1392,14 @@ function startAnalysis() {
                      en:{salon:'living room',yatak:'bedroom',mutfak:'kitchen',cocuk:"children's room"}};
   const roomLabel = roomNames[currentLang][roomId] || 'living room';
   const file = getUploadedFile();
-
+ 
   let analysisPromise;
   if (file) {
     analysisPromise = fileToBase64(file).then(b64 => analyzeRoomWithGemini(roomId, b64, file.type));
   } else {
     analysisPromise = Promise.resolve(null);
   }
-
+ 
   function next() {
     if(i>0){const p=document.getElementById(steps[i-1]);p.classList.remove('active');p.classList.add('done');p.querySelector('.step-icon').textContent='✓';}
     if(i<steps.length){document.getElementById(steps[i]).classList.add('active');i++;setTimeout(next,850);} else {
@@ -1500,9 +1419,8 @@ function startAnalysis() {
   }
   setTimeout(next, 250);
 }
-
+ 
 // ── CHAT ──
-
 function toggleChat() {
   chatOpen = !chatOpen;
   const panel = document.getElementById('chat-panel');
@@ -1511,8 +1429,8 @@ function toggleChat() {
   fab.textContent = chatOpen ? '✕' : '💬';
   if (chatOpen && chatHistory.length===0) {
     const greeting = currentLang==='tr'
-      ? 'Merhaba! 👋 Deprem güvenliği veya ev düzenlemesi hakkında her şeyi sorabilirsin. Örneğin: "Hangi koltuk daha güvenli?", "Depremde nerede durmalıyım?" veya "Dolabı nasıl sabitleyebilirim?" 🏠'
-      : 'Hello! 👋 Ask me anything about earthquake safety or home arrangement. For example: "Which sofa is safer?", "Where should I shelter?" or "How do I anchor my cabinet?" 🏠';
+      ? 'Merhaba! 👋 Deprem güvenliği veya ev düzenlemesi hakkında her şeyi sorabilirsin.'
+      : 'Hello! 👋 Ask me anything about earthquake safety or home arrangement.';
     addBotMessage(greeting);
   }
 }
@@ -1537,16 +1455,15 @@ function showTyping() {
   msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
 }
 function removeTyping() { const t=document.getElementById('typing-indicator'); if(t) t.remove(); }
-
-
+ 
 function buildRoomContextForChat() {
   const a = appState.latestAnalysis;
   if (!a) return '';
   const risks = a.risks.slice(0,3).map(r => `- ${r.t}: ${r.d}`).join('\n');
   const actions = a.checklist.slice(0,3).map(c => `- ${c.t}`).join('\n');
   return currentLang === 'tr'
-    ? `Son analiz özeti:\n${a.summary}\nEn güvenli alan: ${a.shelter.best} — ${a.shelter.bestDesc}\nBaşlıca riskler:\n${risks}\nÖncelikli aksiyonlar:\n${actions}`
-    : `Latest room analysis:\n${a.summary}\nSafest area: ${a.shelter.best} — ${a.shelter.bestDesc}\nMain risks:\n${risks}\nPriority actions:\n${actions}`;
+    ? `Son analiz ozeti:\n${a.summary}\nEn guvenli alan: ${a.shelter.best}\nBaslica riskler:\n${risks}\nAksiyonlar:\n${actions}`
+    : `Latest analysis:\n${a.summary}\nSafest area: ${a.shelter.best}\nMain risks:\n${risks}\nActions:\n${actions}`;
 }
 function localChatFallback(text) {
   const q = text.toLowerCase();
@@ -1562,44 +1479,49 @@ function localChatFallback(text) {
       : `🔧 Start with: ${a.checklist.slice(0,2).map(x=>x.t).join(' · ')}`;
   }
   return currentLang === 'tr'
-    ? '📌 Kısa cevap: pencerelerden, devrilebilecek dolaplardan ve asılı ağır objelerden uzak dur. Çök–Kapan–Tutun uygula.'
-    : '📌 Short answer: stay away from windows, tall unsecured furniture, and heavy hanging items. Drop–Cover–Hold On.';
+    ? '📌 Pencerelerden, devrilebilecek dolaplardan ve asılı ağır objelerden uzak dur. Çök–Kapan–Tutun uygula.'
+    : '📌 Stay away from windows, tall unsecured furniture, and heavy hanging items. Drop–Cover–Hold On.';
 }
-
+ 
 async function sendChatMessage() {
-  const input=document.getElementById('chat-input');
-  const text=input.value.trim(); if(!text) return;
-  input.value='';
-  document.getElementById('chat-suggestions').style.display='none';
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  document.getElementById('chat-suggestions').style.display = 'none';
   addUserMessage(text);
   showTyping();
   try {
-    const sys = currentLang==='tr'
-      ? 'Sen QuakeReady uygulamasının deprem güvenliği uzmanı yapay zeka asistanısın. Kısa, net, pratik ve doğal Türkçe cevaplar ver. Gereksiz genel bilgi verme. Gerekirse madde işaretsiz kısa öneriler yaz. Emoji kullanabilirsin.'
-      : 'You are QuakeReady AI, an earthquake safety expert. Give concise, practical, natural answers focused on home safety. Use light emoji when helpful.';
-    const hist = chatHistory.slice(-8).map(m=>`${m.role==='user'?'User':'Assistant'}: ${m.content}`).join('\n');
+    const sys = currentLang === 'tr'
+      ? 'Sen QuakeReady uygulamasinin deprem guvenligi uzmani yapay zeka asistanisin. Kisa, net, pratik Turkce cevaplar ver. Emoji kullanabilirsin.'
+      : 'You are QuakeReady AI, an earthquake safety expert. Give concise, practical answers.';
+    const hist = chatHistory.slice(-8).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
     const roomCtx = buildRoomContextForChat();
     const prompt = `${sys}\n\n${roomCtx ? roomCtx + '\n\n' : ''}Conversation:\n${hist}\nUser: ${text}\nAssistant:`;
     const reply = await geminiText(prompt, null, null, { temperature: 0.45, maxOutputTokens: 500 });
     removeTyping();
-    addBotMessage(reply || localChatFallback(text));
-  } catch(err) {
+    if (reply) {
+      addBotMessage(reply);
+    } else {
+      console.warn('[QR] Chat: Gemini returned null, using fallback');
+      addBotMessage(localChatFallback(text));
+    }
+  } catch (err) {
     removeTyping();
-    console.error('chat error:', err);
+    console.error('[QR] Chat error:', err);
     addBotMessage(localChatFallback(text));
   }
 }
 function sendSuggestion(el){document.getElementById('chat-input').value=el.textContent;sendChatMessage();}
 function chatKeyDown(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChatMessage();}}
-
-
+ 
 // ── MODAL ──
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.addEventListener('click',e=>{
   document.querySelectorAll('.modal-overlay').forEach(m=>{if(e.target===m)m.classList.remove('open');});
 });
-
+ 
 // ── MISC ──
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -1612,7 +1534,6 @@ function showScreen(id){
     if(chatOpen) toggleChat();
   }
 }
-
 function toggleCheck(item){ item.classList.toggle('checked'); }
 function goBack(){ showScreen('screen-upload'); }
 function openDrawer(panel){
@@ -1640,9 +1561,8 @@ function showToast(msg){
   t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);
 }
 function toggleLang(){ setLang(currentLang==='tr'?'en':'tr'); }
-
-// ── ACCOUNT ──
-// ── CUSTOM CONFIRM ──
+ 
+// ── CONFIRM MODAL ──
 let confirmCallback = null;
 function showConfirm(title, msg, okLabel, cb) {
   document.getElementById('confirm-title').textContent = title;
@@ -1656,7 +1576,7 @@ function confirmAction() {
   closeModal('modal-confirm');
   if (confirmCallback) { confirmCallback(); confirmCallback = null; }
 }
-
+ 
 // ── ACCOUNT ──
 function updateAccountUI() {
   if (!loggedInUser) return;
@@ -1669,10 +1589,8 @@ function updateAccountUI() {
 function showUpgradePlan() { closeDrawer(); showScreen('screen-pricing'); }
 function openHistoryScreen() { closeDrawer(); renderHistory(); showScreen('screen-history'); }
 function goBackFromHistory() { showScreen('screen-upload'); }
-
 function logoutUser() {
-  showConfirm(
-    currentLang==='tr'?'🚪 Çıkış Yap':'🚪 Sign Out',
+  showConfirm(currentLang==='tr'?'🚪 Çıkış Yap':'🚪 Sign Out',
     currentLang==='tr'?'Çıkış yapmak istediğinizden emin misiniz?':'Are you sure you want to sign out?',
     currentLang==='tr'?'Çıkış Yap':'Sign Out',
     () => {
@@ -1682,17 +1600,14 @@ function logoutUser() {
       document.getElementById('acct-name').textContent = currentLang==='tr'?'Misafir':'Guest';
       document.getElementById('acct-email').textContent = currentLang==='tr'?'Giriş yapılmadı':'Not signed in';
       document.getElementById('lbl-my-plan').textContent = currentLang==='tr'?'Planım: Ücretsiz':'My Plan: Free';
-      updateUsageBar(); closeDrawer();
-      showScreen('screen-auth');
+      updateUsageBar(); closeDrawer(); showScreen('screen-auth');
       showToast(currentLang==='tr'?'👋 Çıkış yapıldı.':'👋 Signed out.');
     }
   );
 }
-
 function deleteAccount() {
-  showConfirm(
-    currentLang==='tr'?'🗑 Hesabı Sil':'🗑 Delete Account',
-    currentLang==='tr'?'Hesabınız ve tüm verileriniz kalıcı olarak silinecek. Bu işlem geri alınamaz.':'Your account and all data will be permanently deleted. This cannot be undone.',
+  showConfirm(currentLang==='tr'?'🗑 Hesabı Sil':'🗑 Delete Account',
+    currentLang==='tr'?'Hesabınız ve tüm verileriniz kalıcı olarak silinecek.':'Your account and all data will be permanently deleted.',
     currentLang==='tr'?'Evet, Sil':'Yes, Delete',
     () => {
       analysisHistory.length = 0; loggedInUser = null;
@@ -1701,104 +1616,85 @@ function deleteAccount() {
       document.getElementById('acct-avatar').textContent = '?';
       document.getElementById('acct-name').textContent = currentLang==='tr'?'Misafir':'Guest';
       document.getElementById('acct-email').textContent = currentLang==='tr'?'Giriş yapılmadı':'Not signed in';
-      updateUsageBar(); closeDrawer();
-      showScreen('screen-auth');
+      updateUsageBar(); closeDrawer(); showScreen('screen-auth');
       showToast(currentLang==='tr'?'🗑 Hesap silindi.':'🗑 Account deleted.');
     }
   );
 }
-
+ 
 // ── HISTORY ──
 const analysisHistory = [];
 let renameTargetId = null;
-
 function saveToHistory(roomType, riskCount) {
   const rn = {tr:{salon:'Salon',yatak:'Yatak Odası',mutfak:'Mutfak',cocuk:'Çocuk Odası'},en:{salon:'Living Room',yatak:'Bedroom',mutfak:'Kitchen',cocuk:"Children's Room"}};
   analysisHistory.unshift({
-    id: Date.now(),
-    label: rn[currentLang][roomType] || roomType,
+    id: Date.now(), label: rn[currentLang][roomType] || roomType,
     date: new Date().toLocaleDateString(currentLang==='tr'?'tr-TR':'en-US'),
     time: new Date().toLocaleTimeString(currentLang==='tr'?'tr-TR':'en-US', {hour:'2-digit',minute:'2-digit'}),
-    room: roomType, risks: riskCount,
-    score: Math.floor(Math.random()*30) + 60
+    room: roomType, risks: riskCount, score: Math.floor(Math.random()*30) + 60
   });
 }
-
 function openHistoryItem(id) {
   const item = analysisHistory.find(a => a.id === id);
   if (!item) return;
   const rt = document.getElementById('res-title');
   if (rt) rt.innerHTML = (currentLang==='tr'?'Analiz: ':'Analysis: ') + '<span style="color:var(--accent2)">' + item.label + '</span>';
   showScreen('screen-results');
-  showToast((currentLang==='tr'?'📂 Açıldı: ':'📂 Opened: ') + item.label);
 }
-
 function startRename(id) {
   renameTargetId = id;
   const item = analysisHistory.find(a => a.id === id);
   document.getElementById('rename-input').value = item ? item.label : '';
-  document.getElementById('rename-title').textContent = currentLang==='tr'?'✏️ Adı Değiştir':'✏️ Rename';
-  document.getElementById('rename-btn').textContent = currentLang==='tr'?'Kaydet':'Save';
   openModal('modal-rename');
   setTimeout(() => document.getElementById('rename-input').focus(), 120);
 }
-
 function applyRename() {
   const val = document.getElementById('rename-input').value.trim();
-  if (!val) { showToast(currentLang==='tr'?'⚠️ Ad boş olamaz':'⚠️ Name cannot be empty'); return; }
+  if (!val) return;
   const item = analysisHistory.find(a => a.id === renameTargetId);
-  if (item) { item.label = val; closeModal('modal-rename'); renderHistory(); showToast(currentLang==='tr'?'✅ Ad güncellendi':'✅ Name updated'); }
+  if (item) { item.label = val; closeModal('modal-rename'); renderHistory(); }
 }
-
 function deleteHistoryItem(id) {
-  showConfirm(
-    currentLang==='tr'?'🗑 Analizi Sil':'🗑 Delete Analysis',
-    currentLang==='tr'?'Bu analiz kaydı silinecek. Emin misiniz?':'This analysis record will be deleted. Are you sure?',
+  showConfirm(currentLang==='tr'?'🗑 Analizi Sil':'🗑 Delete Analysis',
+    currentLang==='tr'?'Bu analiz kaydı silinecek.':'This record will be deleted.',
     currentLang==='tr'?'Sil':'Delete',
-    () => { const idx = analysisHistory.findIndex(a => a.id === id); if (idx > -1) analysisHistory.splice(idx, 1); renderHistory(); showToast(currentLang==='tr'?'🗑 Silindi':'🗑 Deleted'); }
+    () => { const idx = analysisHistory.findIndex(a => a.id === id); if (idx > -1) analysisHistory.splice(idx, 1); renderHistory(); }
   );
 }
-
 function renderHistory() {
   const el = document.getElementById('history-list');
   document.getElementById('hist-title').textContent = currentLang==='tr'?'Analiz Geçmişi':'Analysis History';
   document.getElementById('hist-sub').textContent = currentLang==='tr'?'Daha önce analiz ettiğin odalar':'Your previously analyzed rooms';
   if (analysisHistory.length === 0) {
-    el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📋</div><div style="font-size:1rem;font-weight:600;color:var(--text);margin-bottom:8px">'+(currentLang==='tr'?'Henüz analiz yapılmadı':'No analyses yet')+'</div><div style="font-size:.84rem">'+(currentLang==='tr'?'Bir oda fotoğrafı yükleyerek başla.':'Upload a room photo to get started.')+'</div></div>';
+    el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:3rem;margin-bottom:16px">📋</div><div style="font-size:1rem;font-weight:600;color:var(--text);margin-bottom:8px">'+(currentLang==='tr'?'Henüz analiz yapılmadı':'No analyses yet')+'</div></div>';
     return;
   }
   const emoji = {salon:'🛋️',yatak:'🛏️',mutfak:'🍳',cocuk:'🧸'};
   el.innerHTML = analysisHistory.map((a,i) => {
     const e = emoji[a.room]||'🏠';
-    const delay = (i*0.08).toFixed(2);
-    const renameTitle = currentLang==='tr'?'Adı değiştir':'Rename';
-    const deleteTitle = currentLang==='tr'?'Sil':'Delete';
-    const riskLabel = currentLang==='tr'?'risk':'risks';
-    return '<div data-hid="'+a.id+'" onclick="openHistoryItem('+a.id+')" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:13px;animation:cardIn .3s '+delay+'s ease forwards;opacity:0;transform:translateY(12px);cursor:pointer;transition:border-color .25s" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
+    return '<div onclick="openHistoryItem('+a.id+')" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:13px;cursor:pointer;transition:border-color .25s" onmouseover="this.style.borderColor=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
       +'<div style="width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,rgba(255,77,46,.18),rgba(255,140,66,.12));display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0">'+e+'</div>'
-      +'<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">'
-      +'<div style="font-weight:700;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+a.label+'</div>'
-      +'<button data-rid="'+a.id+'" onclick="event.stopPropagation();startRename('+a.id+')" title="'+renameTitle+'" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.75rem;padding:2px 4px;border-radius:4px;flex-shrink:0" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--muted)\'">✏️</button>'
-      +'</div><div style="font-size:.74rem;color:var(--muted)">'+a.date+' · '+a.time+'</div></div>'
-      +'<div style="text-align:right;flex-shrink:0;margin-right:4px"><div style="font-size:.76rem;color:var(--accent);font-weight:600;margin-bottom:4px">'+a.risks+' '+riskLabel+'</div>'
-      +'<div style="height:5px;width:68px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:2px"><div style="height:100%;width:'+a.score+'%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:3px"></div></div>'
+      +'<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:.9rem">'+a.label
+      +' <button onclick="event.stopPropagation();startRename('+a.id+')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.75rem">✏️</button></div>'
+      +'<div style="font-size:.74rem;color:var(--muted)">'+a.date+' · '+a.time+'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0"><div style="font-size:.76rem;color:var(--accent);font-weight:600">'+a.risks+' risk</div>'
       +'<div style="font-size:.68rem;color:var(--muted)">'+a.score+'/100</div></div>'
-      +'<button data-did="'+a.id+'" onclick="event.stopPropagation();deleteHistoryItem('+a.id+')" title="'+deleteTitle+'" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.88rem;padding:5px;border-radius:7px;flex-shrink:0" onmouseover="this.style.color=\'var(--accent)\'" onmouseout="this.style.color=\'var(--muted)\'">🗑</button>'
-      +'</div>';
+      +'<button onclick="event.stopPropagation();deleteHistoryItem('+a.id+')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:.88rem">🗑</button></div>';
   }).join('');
 }
-
-
+ 
+// ── DRAG & DROP ──
 const zone=document.getElementById('upload-zone');
 zone.addEventListener('dragover',e=>{e.preventDefault();zone.style.borderColor='var(--accent)';});
 zone.addEventListener('dragleave',()=>{zone.style.borderColor='var(--border)';});
 zone.addEventListener('drop',e=>{
   e.preventDefault();zone.style.borderColor='var(--border)';
   const file=e.dataTransfer.files[0];if(!file)return;
-  const r=new FileReader();r.onload=ev=>{const th=document.getElementById('preview-thumb');th.src=ev.target.result;th.style.display='block';};r.readAsDataURL(file);
+  const dt=new DataTransfer();dt.items.add(file);document.getElementById('file-input').files=dt.files;
+  const r=new FileReader();r.onload=ev=>{const th=document.getElementById('preview-thumb');th.src=ev.target.result;th.style.display='block';appState.originalImageDataUrl=ev.target.result;};r.readAsDataURL(file);
 });
-
-// ── LANGUAGE DICT (simplified for space) ──
+ 
+// ── LANGUAGE ──
 function setLang(lang) {
   currentLang = lang;
   document.getElementById('btn-tr').classList.toggle('active',lang==='tr');
@@ -1857,31 +1753,29 @@ function setLang(lang) {
   set('s3',isTR?'Deprem senaryosu üretiliyor':'Generating earthquake scenario');
   set('s4',isTR?'Güvenli yerleşim oluşturuluyor':'Creating safe layout');
   set('res-title',isTR?'Analizin Tamamlandı':'Analysis Complete');
-  set('res-badge',isTR?'🔴 Yüksek Risk — 5 tehlike noktası':'🔴 High Risk — 5 danger points');
   set('st1',isTR?' Risk noktası':' Risk points');set('st2',isTR?' Kritik tehlike':' Critical dangers');set('st3',isTR?' Risk düşürme potansiyeli':' Risk reduction potential');
-  set('demo-txt',isTR?'<strong>Canlı AI</strong> — Fotoğrafa göre üretilen metin ve görseller burada görünür.':'<strong>Live AI</strong> — Photo-grounded text and visuals appear here.');
   set('pos-title',isTR?'Deprem Anında Doğru Pozisyon':'Correct Position During Earthquake');
-  set('pos-sub',isTR?'Sarsıntı başladığında bu 3 adımı uygula: Çök — Kapan — Tutun':'When shaking starts, follow these 3 steps: Drop — Cover — Hold On');
+  set('pos-sub',isTR?'Sarsıntı başladığında bu 3 adımı uygula: Çök — Kapan — Tutun':'When shaking starts: Drop — Cover — Hold On');
   set('pos-step1',isTR?'1. ADIM':'STEP 1');set('pos-name1',isTR?'ÇÖK':'DROP');
-  set('pos-desc1',isTR?'Sarsıntı başlar başlamaz hemen yere çök. Diz ve ellerinin üzerine in.':'Drop to the ground immediately. Get on hands and knees.');
-  set('pos-tip1',isTR?'💡 Ellerini ve dizlerini yere daya, sağlam bir pozisyon al.':'💡 Place hands and knees on the floor, find a stable position.');
+  set('pos-desc1',isTR?'Sarsıntı başlar başlamaz hemen yere çök. Diz ve ellerinin üzerine in.':'Drop to the ground immediately.');
+  set('pos-tip1',isTR?'💡 Ellerini ve dizlerini yere daya, sağlam bir pozisyon al.':'💡 Place hands and knees on the floor.');
   set('pos-step2',isTR?'2. ADIM':'STEP 2');set('pos-name2',isTR?'KAPAN':'COVER');
-  set('pos-desc2',isTR?'Sağlam bir masanın altına gir. Masa yoksa kollarınla kafanı koru.':'Get under a sturdy table. If no table, cover head with arms.');
-  set('pos-tip2',isTR?'💡 Kollarını kafanın iki yanına al, başını iki kolun arasına göm.':'💡 Put arms on either side of head, tuck head between arms.');
+  set('pos-desc2',isTR?'Sağlam bir masanın altına gir. Masa yoksa kollarınla kafanı koru.':'Get under a sturdy table or cover head with arms.');
+  set('pos-tip2',isTR?'💡 Kollarını kafanın iki yanına al.':'💡 Put arms on either side of head.');
   set('pos-step3',isTR?'3. ADIM':'STEP 3');set('pos-name3',isTR?'TUTUN':'HOLD ON');
-  set('pos-desc3',isTR?'Masa ayağını sıkıca tut. Sarsıntı tamamen bitene kadar kımıldama.':'Hold on to the table leg. Don\'t move until shaking stops.');
-  set('pos-tip3',isTR?'💡 Sarsıntı genellikle 20-60 saniye sürer. Tamamen bitene kadar bırakma.':'💡 Shaking usually lasts 20-60 seconds. Don\'t release until it fully stops.');
+  set('pos-desc3',isTR?'Masa ayağını sıkıca tut. Sarsıntı bitene kadar kımıldama.':'Hold on until shaking stops.');
+  set('pos-tip3',isTR?'💡 Sarsıntı genellikle 20-60 saniye sürer.':'💡 Shaking usually lasts 20-60 seconds.');
   set('bag-title',isTR?'Deprem Çantanda Neler Olmalı?':'What Should Be in Your Emergency Bag?');
-  set('bag-sub',isTR?'AFAD ve Kızılay önerilerine göre kapsamlı liste':'Based on FEMA and Red Cross guidelines');
+  set('bag-sub',isTR?'AFAD ve Kızılay önerilerine göre':'Based on FEMA and Red Cross guidelines');
   set('comp-title',isTR?'Görsel Karşılaştırma':'Visual Comparison');
   set('check-title',isTR?'Yapman Gerekenler':'Action Items');
   set('btn-back',isTR?'Yeni Oda Analiz Et':'Analyze New Room');
   set('btn-pdf',isTR?'PDF Raporu İndir':'Download PDF Report');
   set('chat-title',isTR?'QuakeReady AI':'QuakeReady AI');
   set('chat-status',isTR?'● Çevrimiçi':'● Online');
-  set('disclaimer-text',isTR?'<strong>Yapay Zeka Uyarısı:</strong> Risk analizleri genel güvenlik ilkelerine dayanmakta olup <strong>%100 doğruluk garantisi verilmez.</strong> Sonuçlar yalnızca bilgilendirme amaçlıdır.':'<strong>AI Disclaimer:</strong> Risk analyses are based on general safety principles and <strong>100% accuracy is not guaranteed.</strong> Results are for informational purposes only.');
+  set('disclaimer-text',isTR?'<strong>Yapay Zeka Uyarısı:</strong> Risk analizleri genel güvenlik ilkelerine dayanmakta olup <strong>%100 doğruluk garantisi verilmez.</strong>':'<strong>AI Disclaimer:</strong> Risk analyses are based on general safety principles and <strong>100% accuracy is not guaranteed.</strong>');
   const sug = document.getElementById('chat-suggestions');
-    if(sug){ sug.innerHTML = isTR
+  if(sug){ sug.innerHTML = isTR
     ? '<div class="chat-sug" onclick="sendSuggestion(this)">Hangi dolap daha güvenli?</div><div class="chat-sug" onclick="sendSuggestion(this)">Depremde nerede saklanmalıyım?</div><div class="chat-sug" onclick="sendSuggestion(this)">TV sabitleme nasıl yapılır?</div>'
     : '<div class="chat-sug" onclick="sendSuggestion(this)">Which cabinet is safer?</div><div class="chat-sug" onclick="sendSuggestion(this)">Where to shelter?</div><div class="chat-sug" onclick="sendSuggestion(this)">How to secure a TV?</div>'; }
   const inp2 = document.getElementById('chat-input');
@@ -1890,184 +1784,9 @@ function setLang(lang) {
   updateAccountUI();
   showToast(lang==='tr' ? '🇹🇷 Türkçe seçildi' : '🇬🇧 English selected');
 }
+ 
+console.log('[QR] ✅ QuakeReady loaded - Models:', GEMINI_MODELS.join(', '));
 
-setTimeout(() => {
-  if (!appSecrets.gemini || !appSecrets.fal) {
-    showToast(currentLang==='tr' ? '🔑 İlk kullanım için API anahtarlarını gir.' : '🔑 Enter API keys on first use.');
-  }
-}, 600);
-  async function geminiRequest({ prompt, imageBase64 = null, imageMime = null, jsonSchema = null, temperature = 0.35, maxOutputTokens = 1400 }) {
-  const ok = await ensureApiKeys('gemini');
-  if (!ok) return null;
- 
-  const parts = [];
-  if (imageBase64 && imageMime) {
-    parts.push({ inline_data: { mime_type: imageMime, data: imageBase64 } });
-  }
-  parts.push({ text: prompt });
- 
-  for (const model of GEMINI_MODELS) {
-    try {
-      console.log('[QR] Gemini request to', model, 'prompt length:', prompt.length);
-      const res = await fetch(`${GEMINI_API_BASE}/${model}:generateContent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': appSecrets.gemini
-        },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts }],
-          generationConfig: {
-            temperature,
-            maxOutputTokens
-            // responseSchema KALDIRILDI - sorun buydu
-          }
-        })
-      });
- 
-      if (!res.ok) {
-        const errBody = await res.text();
-        console.error('[QR] Gemini HTTP ERROR', model, res.status, errBody.slice(0, 200));
-        showToast('❌ Gemini HTTP ' + res.status);
-        continue;
-      }
- 
-      const data = await res.json();
-      if (data.error) {
-        console.error('[QR] Gemini API error', model, data.error);
-        showToast('❌ Gemini: ' + (data.error?.message || 'API error'));
-        continue;
-      }
- 
-      const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('').trim();
-      console.log('[QR] Gemini response length:', text?.length, 'preview:', text?.slice(0, 100));
-      if (text) return text;
-    } catch (err) {
-      console.error('[QR] geminiRequest error:', model, err);
-      showToast('❌ Gemini: ' + (err?.message || String(err)).slice(0, 60));
-    }
-  }
-  return null;
-}
- 
-// FIX: geminiJson - Schema'yi API'ye gonderme, prompt'ta JSON iste
-async function geminiJson(prompt, schema, imageBase64 = null, imageMime = null, opts = {}) {
-  const jsonPrompt = prompt + '\n\nCRITICAL: Return ONLY valid JSON. No markdown backticks, no explanation, no extra text. Start with { and end with }';
-  const raw = await geminiRequest({ prompt: jsonPrompt, imageBase64, imageMime, ...opts });
-  if (!raw) {
-    console.error('[QR] geminiJson: Gemini returned null');
-    showToast('❌ AI yanit vermedi');
-    return null;
-  }
-  try {
-    // Markdown code block varsa temizle
-    let cleaned = raw;
-    if (cleaned.includes('```')) {
-      cleaned = cleaned.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-    }
-    cleaned = cleaned.trim();
-    // Bazen Gemini basa/sona bosluk veya text ekler
-    const firstBrace = cleaned.indexOf('{');
-    const lastBrace = cleaned.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-    }
-    const parsed = JSON.parse(cleaned);
-    console.log('[QR] geminiJson parsed OK, keys:', Object.keys(parsed));
-    return parsed;
-  } catch (err) {
-    console.error('[QR] geminiJson parse error:', err.message, 'raw preview:', raw?.slice(0, 300));
-    showToast('❌ JSON parse hatasi');
-    return null;
-  }
-}
- 
-// FIX: analyzeRoomWithGemini - Schema olmadan calistir
-async function analyzeRoomWithGemini(roomId, b64, mime) {
-  const isTR = currentLang === 'tr';
-  const roomLabelTR = {salon:'salon',yatak:'yatak odası',mutfak:'mutfak',cocuk:'çocuk odası'};
-  const roomLabelEN = {salon:'living room',yatak:'bedroom',mutfak:'kitchen',cocuk:"children's room"};
-  const rl = isTR ? (roomLabelTR[roomId]||'oda') : (roomLabelEN[roomId]||'room');
- 
-  const prompt = isTR
-    ? `Sen QuakeReady icin deprem guvenligi uzmanisin. Kullanici bir ${rl} fotografi yukledi.
-Gorevin:
-1) Fotograftaki gercek esyalara dayanarak 5 somut deprem riski cikar.
-2) Kisa, dogal Turkce yaz.
-3) Saklanma alanini odaya gore oner.
-4) Gorsel uzeri etiketler icin yaklasik konum ver. x ve y degerleri 8 ile 92 arasinda olmali.
-5) riskImagePrompt ve safeImagePrompt alanlarini INGILIZCE yaz; fal.ai gorsel uretecek.
-6) riskImagePrompt mevcut odanin duzenini koruyup deprem aninda neyin devrildigini anlatsin.
-7) safeImagePrompt ayni odayi daha guvenli yerlesimle anlatsin.
-8) summary alani 1 cumle olsun.
- 
-Asagidaki JSON formatinda SADECE JSON dondur (baska hicbir sey yazma):
-{
-  "summary": "...",
-  "roomDesc": "...",
-  "riskImagePrompt": "...",
-  "safeImagePrompt": "...",
-  "risks": [{"icon":"emoji","title":"...","desc":"...","severity":"high veya medium"}],
-  "checklist": [{"text":"...","priority":"high veya medium"}],
-  "shelter": {"best":"...","bestDesc":"...","second":"...","secondDesc":"...","third":"...","thirdDesc":"...","avoid":["...","...","...","..."]},
-  "riskMarkers": [{"label":"...","x":30,"y":40}],
-  "safeMarkers": [{"label":"...","x":30,"y":40}]
-}`
-    : `You are the QuakeReady earthquake safety expert. The user uploaded a ${rl} photo.
-Extract 5 concrete earthquake risks from the actual items in the photo.
-Return ONLY this JSON format (nothing else):
-{
-  "summary": "one sentence",
-  "roomDesc": "brief room description",
-  "riskImagePrompt": "English prompt for fal.ai showing this room during earthquake",
-  "safeImagePrompt": "English prompt for fal.ai showing this room safely rearranged",
-  "risks": [{"icon":"emoji","title":"...","desc":"...","severity":"high or medium"}],
-  "checklist": [{"text":"...","priority":"high or medium"}],
-  "shelter": {"best":"...","bestDesc":"...","second":"...","secondDesc":"...","third":"...","thirdDesc":"...","avoid":["...","...","...","..."]},
-  "riskMarkers": [{"label":"...","x":30,"y":40}],
-  "safeMarkers": [{"label":"...","x":30,"y":40}]
-}`;
- 
-  console.log('[QR] Analyzing room:', roomId, 'image size:', b64?.length);
-  return geminiJson(prompt, null, b64, mime, { temperature: 0.2, maxOutputTokens: 2000 });
-}
- 
-// FIX: sendChatMessage - Hata gosterimi
-async function sendChatMessage() {
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  document.getElementById('chat-suggestions').style.display = 'none';
-  addUserMessage(text);
-  showTyping();
-  try {
-    const sys = currentLang === 'tr'
-      ? 'Sen QuakeReady uygulamasinin deprem guvenligi uzmani yapay zeka asistanisin. Kisa, net, pratik ve dogal Turkce cevaplar ver. Emoji kullanabilirsin.'
-      : 'You are QuakeReady AI, an earthquake safety expert. Give concise, practical answers.';
-    const hist = chatHistory.slice(-8).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
-    const roomCtx = buildRoomContextForChat();
-    const prompt = `${sys}\n\n${roomCtx ? roomCtx + '\n\n' : ''}Conversation:\n${hist}\nUser: ${text}\nAssistant:`;
-    console.log('[QR] Chat prompt length:', prompt.length);
-    const reply = await geminiText(prompt, null, null, { temperature: 0.45, maxOutputTokens: 500 });
-    removeTyping();
-    if (reply) {
-      console.log('[QR] Chat reply:', reply.slice(0, 100));
-      addBotMessage(reply);
-    } else {
-      console.warn('[QR] Chat: Gemini returned null, using fallback');
-      showToast('⚠️ AI yanit veremedi, yerel cevap gosteriliyor');
-      addBotMessage(localChatFallback(text));
-    }
-  } catch (err) {
-    removeTyping();
-    console.error('[QR] Chat error:', err);
-    showToast('❌ Chat hatasi: ' + (err?.message || ''));
-    addBotMessage(localChatFallback(text));
-  }
-}
- 
-console.log('[QR] ✅ QuakeReady JS patches loaded successfully');
  
 </script>
 </body>
