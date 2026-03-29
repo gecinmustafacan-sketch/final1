@@ -910,8 +910,8 @@ async function ensureApiKeys(mode = 'all') {
 
   if (needGemini && !appSecrets.gemini) {
     const val = prompt(currentLang === 'tr'
-      ? 'Gemini API key yapıştır. Bir kez kaydedilecek ve bu tarayıcıda saklanacak.'
-      : 'Paste your Gemini API key. It will be saved in this browser.');
+      ? 'AIzaSyBzPegsHn7MCbZvbJQVa_8lMrx7eP5ZRHQ key yapıştır. Bir kez kaydedilecek ve bu tarayıcıda saklanacak.'
+      : 'Paste your AIzaSyBzPegsHn7MCbZvbJQVa_8lMrx7eP5ZRHQ. It will be saved in this browser.');
     if (val) { appSecrets.gemini = sanitizeApiKey(val); changed = true; }
   }
   if (needFal && !appSecrets.fal) {
