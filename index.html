@@ -1104,35 +1104,59 @@ async function analyzeRoomWithAI(roomId, b64, mime) {
   const rl = (roomLabels[currentLang] || roomLabels.tr)[roomId] || 'oda';
  
   const systemPrompt = isTR
-    ? 'Sen QuakeReady uygulaması için deprem güvenliği uzmanısın. Kullanıcının yüklediği oda fotoğrafını analiz ederek deprem risklerini tespit et. SADECE JSON formatında yanıt ver, başka hiçbir şey yazma.'
-    : 'You are an earthquake safety expert for QuakeReady app. Analyze the uploaded room photo for earthquake risks. Return ONLY JSON, nothing else.';
+    ? `Sen Türkiye'de deprem güvenliği konusunda 20 yıllık deneyime sahip bir yapı mühendisi ve AFAD uzmanısın. QuakeReady uygulaması için oda fotoğraflarını analiz ediyorsun.
+ 
+Analiz kuralların:
+- Fotoğraftaki HER eşyayı tek tek incele (mobilya, elektronik, raf, dekorasyon, pencere, aydınlatma)
+- Türkiye'deki deprem gerçeklerine göre değerlendir (7+ büyüklüğünde deprem senaryosu)
+- Devrilme, düşme, kırılma, ezilme risklerini ayrı ayrı belirt
+- Eşyanın ağırlığına, yüksekliğine ve sabitlenme durumuna göre severity belirle
+- Saklanma alanını odanın gerçek düzenine göre öner
+- riskImagePrompt ve safeImagePrompt çok detaylı ve İNGİLİZCE olsun
+ 
+SADECE JSON formatında yanıt ver. Başka hiçbir şey yazma.`
+    : `You are a structural engineer with 20 years of earthquake safety experience analyzing room photos for QuakeReady.
+ 
+Rules:
+- Examine EVERY item (furniture, electronics, shelves, decor, windows, lighting)
+- Evaluate for 7+ magnitude earthquake scenario
+- Assess tipping, falling, shattering, crushing risks separately
+- Determine severity by weight, height, anchoring status
+- Suggest shelter based on actual room layout
+- Make image prompts very detailed in English for fal.ai
+ 
+Return ONLY JSON. Nothing else.`;
  
   const userPrompt = isTR
-    ? `Bu bir ${rl} fotoğrafı. Fotoğraftaki gerçek eşyalara dayanarak analiz et.
+    ? `Bu bir ${rl} fotoğrafı. Fotoğrafı ÇOK DİKKATLİ incele. Her eşyayı tek tek gör ve deprem senaryosunda ne olacağını düşün.
  
-Aşağıdaki JSON formatında SADECE JSON döndür:
+ÖNEMLİ: Genel cevap VERME. Fotoğraftaki GERÇEK eşyalara göre SPESİFİK analiz yap.
+ 
+JSON formatında döndür:
 {
-  "summary": "1 cümlelik özet",
-  "roomDesc": "odanın kısa açıklaması",
-  "riskImagePrompt": "İNGİLİZCE: bu odanın deprem anındaki halini anlatan fal.ai prompt",
-  "safeImagePrompt": "İNGİLİZCE: bu odanın güvenli düzenlenmiş halini anlatan fal.ai prompt",
+  "summary": "Fotoğraftaki odayı 2-3 cümleyle özetle, HANGİ eşyaların risk oluşturduğunu SOMUT belirt",
+  "roomDesc": "Odanın detaylı açıklaması: hangi eşyalar var, nasıl yerleştirilmiş, pencere/kapı konumları",
+  "riskImagePrompt": "IN ENGLISH ONLY: Very detailed prompt for fal.ai describing THIS EXACT room during a 7.0 earthquake. Describe specific furniture tipping, items falling, glass breaking. Include room colors, furniture types, layout details you see in the photo. Be very descriptive.",
+  "safeImagePrompt": "IN ENGLISH ONLY: Very detailed prompt for fal.ai describing THIS EXACT room safely rearranged. Same furniture but anchored, secured, reorganized. Include room colors and style from photo. Be very descriptive.",
   "risks": [
-    {"icon": "emoji", "title": "risk başlığı", "desc": "kısa açıklama", "severity": "high veya medium"}
+    {"icon": "uygun emoji", "title": "Fotoğraftaki spesifik eşyaya göre risk başlığı", "desc": "Bu eşyanın depremde NASIL tehlikeli olduğunu 2-3 cümleyle açıkla. Ağırlık, yükseklik, sabitlenme durumunu belirt.", "severity": "high (ağır/yüksek/sabitlenmemiş) veya medium (hafif/düşük)"}
   ],
   "checklist": [
-    {"text": "yapılması gereken", "priority": "high veya medium"}
+    {"text": "Somut aksiyon: HANGİ eşya, NASIL sabitlenecek, NE kullanılacak (L-braketi, anti-tip kayışı vb.)", "priority": "high veya medium"}
   ],
   "shelter": {
-    "best": "en güvenli yer", "bestDesc": "neden güvenli",
-    "second": "ikinci seçenek", "secondDesc": "açıklama",
-    "third": "üçüncü seçenek", "thirdDesc": "açıklama",
-    "avoid": ["kaçınılacak yer 1", "kaçınılacak yer 2", "kaçınılacak yer 3", "kaçınılacak yer 4"]
+    "best": "Bu odadaki en güvenli nokta (fotoğrafa göre spesifik)", "bestDesc": "Neden güvenli: 2 cümle, pencereden/dolaptan uzaklık vb.",
+    "second": "İkinci güvenli nokta", "secondDesc": "Neden",
+    "third": "Üçüncü seçenek", "thirdDesc": "Neden",
+    "avoid": ["Tehlikeli nokta 1 — nedeniyle birlikte", "Tehlikeli nokta 2 — nedeniyle", "Tehlikeli nokta 3 — nedeniyle", "Tehlikeli nokta 4 — nedeniyle"]
   },
-  "riskMarkers": [{"label": "etiket", "x": 30, "y": 40}],
-  "safeMarkers": [{"label": "etiket", "x": 30, "y": 40}]
+  "riskMarkers": [{"label": "3-4 kelimelik etiket", "x": 30, "y": 40}],
+  "safeMarkers": [{"label": "3-4 kelimelik etiket", "x": 30, "y": 40}]
 }
  
-5 risk, 5 checklist maddesi, 3 riskMarker ve 3 safeMarker olsun. x ve y değerleri 8-92 arasında olsun.`
+TAM 5 risk, TAM 5 checklist, TAM 3 riskMarker, TAM 3 safeMarker üret.
+x/y değerleri fotoğraftaki eşyanın GERÇEK konumuna yakın olsun (8-92).
+severity: Ağır mobilya/yüksek dolap/sabitlenmemiş TV = "high". Hafif dekor/düşük raf = "medium".`
     : `This is a ${rl} photo. Analyze based on actual items visible.
  
 Return ONLY this JSON (5 risks, 5 checklist items, 3 markers each):
@@ -1287,8 +1311,8 @@ async function startAnalysis() {
     const { base64: b64, mime: resizedMime } = await resizeImageForAPI(file, 1024);
     console.log('[QR] Sending to Groq vision, base64 length:', b64.length);
     // Animate steps while waiting
-    setTimeout(() => activateStep(1), 800);
-    setTimeout(() => activateStep(2), 1600);
+    setTimeout(() => activateStep(1), 1200);
+    setTimeout(() => activateStep(2), 2500);
  
     aiData = await analyzeRoomWithAI(roomId, b64, resizedMime);
  
@@ -1348,10 +1372,39 @@ function removeTyping(){const t=document.getElementById('typing-indicator');if(t
 function buildRoomContext() {
   const a = appState.latestAnalysis;
   if (!a) return '';
-  const risks = a.risks.slice(0,3).map(r=>`- ${r.t}: ${r.d}`).join('\n');
-  return currentLang==='tr'
-    ? `Kullanıcının odası analiz edildi:\n${a.summary}\nEn güvenli alan: ${a.shelter.best}\nRiskler:\n${risks}`
-    : `User's room analysis:\n${a.summary}\nSafest spot: ${a.shelter.best}\nRisks:\n${risks}`;
+  const allRisks = a.risks.map(r => `- ${r.t} (${r.s==='high'?'KRİTİK':'ORTA'}): ${r.d}`).join('\n');
+  const allChecklist = a.checklist.map(c => `- ${c.t} (${c.p==='high'?'ÖNCELİKLİ':'ORTA'})`).join('\n');
+  const avoidList = (a.shelter.avoid || []).map(x => `- ${x}`).join('\n');
+ 
+  if (currentLang === 'tr') {
+    return `KULLANICININ ODA ANALİZİ (fotoğraftan tespit edildi):
+Özet: ${a.summary}
+Oda açıklaması: ${a.roomDesc || 'Bilgi yok'}
+ 
+TESPİT EDİLEN RİSKLER:
+${allRisks}
+ 
+YAPILMASI GEREKENLER:
+${allChecklist}
+ 
+EN GÜVENLİ SAKLANMA ALANLARI:
+1. ${a.shelter.best}: ${a.shelter.bestDesc}
+2. ${a.shelter.second}: ${a.shelter.secondDesc}
+3. ${a.shelter.third}: ${a.shelter.thirdDesc}
+ 
+KESİNLİKLE GİTMEMESİ GEREKEN YERLER:
+${avoidList}
+ 
+Bu bilgileri kullanarak kullanıcının sorularına SOMUT ve SPESİFİK cevap ver. Kullanıcının odası hakkında bilgi sahibisin - genel cevap verme.`;
+  }
+  return `USER ROOM ANALYSIS (detected from photo):
+Summary: ${a.summary}
+Room: ${a.roomDesc || 'N/A'}
+Risks: ${allRisks}
+Actions: ${allChecklist}
+Safest spots: 1) ${a.shelter.best} 2) ${a.shelter.second} 3) ${a.shelter.third}
+Avoid: ${avoidList}
+Use this data to give SPECIFIC answers about the user's actual room.`;
 }
  
 async function sendChatMessage() {
@@ -1363,9 +1416,26 @@ async function sendChatMessage() {
   addUserMessage(text);
   showTyping();
  
+  const roomCtx = buildRoomContext();
   const systemMsg = currentLang === 'tr'
-    ? `Sen QuakeReady uygulamasının deprem güvenliği uzmanı AI asistanısın. Kısa, net, pratik Türkçe cevaplar ver. Emoji kullanabilirsin. ${buildRoomContext()}`
-    : `You are QuakeReady AI earthquake safety expert. Give concise, practical answers. ${buildRoomContext()}`;
+    ? `Sen QuakeReady uygulamasının deprem güvenliği uzmanı AI asistanısın.
+ 
+KURALLAR:
+- Kullanıcının odasını ZATEN analiz ettin, sonuçlar aşağıda.
+- Kullanıcı "fotoğrafımda ne var", "saklanma alanı neresi" derse analiz sonuçlarından SOMUT cevap ver.
+- Kısa, net, pratik Türkçe cevaplar ver. Emoji kullanabilirsin.
+- "Fotoğrafı göremiyorum" DEME çünkü analiz sonuçların var.
+ 
+${roomCtx}`
+    : `You are QuakeReady AI earthquake safety expert.
+ 
+RULES:
+- You ALREADY analyzed the user's room. Results are below.
+- When asked about their photo/room, give SPECIFIC answers from the analysis.
+- Never say "I can't see the photo" - you have the analysis results.
+- Be concise and practical.
+ 
+${roomCtx}`;
  
   // Build message history for Groq
   const messages = [{ role: 'system', content: systemMsg }];
@@ -1649,7 +1719,6 @@ function setLang(lang) {
 }
  
 console.log('[QR] ✅ QuakeReady loaded with Groq AI');
- 
 
 </script>
 </body>
